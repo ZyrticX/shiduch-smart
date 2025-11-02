@@ -1,73 +1,154 @@
-# Welcome to your Lovable project
+# מערכת שיבוץ חכמה - מדריך למשתמש
 
-## Project info
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/ZyrticX/shiduch-smart)
+[![License](https://img.shields.io/badge/License-MIT-green)](https://github.com/ZyrticX/shiduch-smart)
 
-**URL**: https://lovable.dev/projects/c9a96343-f276-4c2f-b6fe-14606a94f84d
+## מהי המערכת?
 
-## How can I edit this code?
+מערכת שיבוץ חכמה היא מערכת ממוחשבת שמסייעת בשיבוץ אוטומטי בין סטודנטים למתנדבים. המערכת משתמשת באלגוריתם חכם שמתחשב במספר קריטריונים כדי למצוא את ההתאמה הטובה ביותר.
 
-There are several ways of editing your application.
+## למה המערכת נועדה?
 
-**Use Lovable**
+המערכת מיועדת לארגונים, עמותות או מוסדות שצריכים:
+- לשַבֵּץ סטודנטים עם מתנדבים
+- לנהל רשימת סטודנטים ומתנדבים
+- לעקוב אחר התאמות מוצלחות
+- לקבל דוחות וניתוחים על פעילות השיבוץ
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/c9a96343-f276-4c2f-b6fe-14606a94f84d) and start prompting.
+## איך המערכת עובדת?
 
-Changes made via Lovable will be committed automatically to this repo.
+### 1. ניהול נתונים
+המערכת מאפשרת לך לנהל שני סוגי משתמשים:
+- **סטודנטים** - אנשים שמחפשים שיבוץ עם מתנדב
+- **מתנדבים** - אנשים שמעוניינים להתנדב ולתת שירות
 
-**Use your preferred IDE**
+לכל סטודנט ומתנדב יש פרטים כמו:
+- שם מלא
+- אימייל וטלפון
+- עיר מגורים
+- שפת אם
+- מין
+- בקשות מיוחדות (לסטודנטים)
+- קיבולת (למתנדבים - כמה סטודנטים הם יכולים לקחת)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 2. יצירת התאמות
+המערכת מציעה התאמות חכמות על בסיס:
+- **שפת אם זהה** (60 נקודות) - התאמה מושלמת אם לשניהם אותה שפת אם
+- **עיר מגורים** (40 נקודות לאותה עיר, 20 נקודות לעיר סמוכה עד 150 ק"מ)
+- **התאמת מין** (15 נקודות)
+- **בקשות מיוחדות** (5 נקודות)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+המערכת מחשבת ציון התאמה בין 0-100, והתאמות עם ציון גבוה יותר מוצגות ראשונות.
 
-Follow these steps:
+### 3. אישור התאמות
+לאחר שהמערכת יצרה התאמות, אתה יכול:
+- **לאשר** התאמה - המערכת תעדכן שהסטודנט שובץ והמתנדב קיבל סטודנט נוסף
+- **לדחות** התאמה - המערכת תסיר את ההתאמה ותחפש התאמות אחרות
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 4. העלאת נתונים מקובץ אקסל
+אפשר להעלות קבצי אקסל עם רשימות של סטודנטים או מתנדבים. המערכת תזהה את הגיליונות ותאפשר לך לבחור איזה גיליון מיועד לסטודנטים ואיזה למתנדבים.
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## איך להשתמש במערכת?
 
-# Step 3: Install the necessary dependencies.
-npm i
+### דף ראשי
+בדף הראשי תראה:
+- **סטטיסטיקות** - כמה סטודנטים ממתינים, כמה מתנדבים פעילים, כמה התאמות ממתינות וכו'
+- **כפתור "הפעל התאמה חכמה"** - לחיצה עליו תפעיל את האלגוריתם ותיצור התאמות חדשות
+- **טבלת התאמות מוצעות** - כל ההתאמות שהמערכת מציעה, עם אפשרות לאשר או לדחות
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+### ניהול סטודנטים
+- **צפייה ברשימה** - רואה את כל הסטודנטים במערכת
+- **חיפוש וסינון** - אפשר לחפש לפי שם, אימייל, טלפון או לסנן לפי עיר/שפה
+- **הוספה/עריכה** - אפשר להוסיף סטודנט חדש או לערוך פרטים של סטודנט קיים
+- **מחיקה** - אפשר למחוק סטודנט (רק אם הוא לא משובץ)
 
-**Edit a file directly in GitHub**
+### ניהול מתנדבים
+- **צפייה ברשימה** - רואה את כל המתנדבים במערכת
+- **חיפוש וסינון** - אפשר לחפש ולסנן כמו בסטודנטים
+- **ניהול קיבולת** - רואה כמה מתנדבים פעילים יש לכל מתנדב (כמה הוא כבר מקבל מתוך כמה הוא יכול)
+- **פעולות קבוצתיות** - אפשר לבחור מספר מתנדבים ולהפעיל/להשהות אותם יחד
+- **הוספה/עריכה** - אפשר להוסיף או לערוך מתנדבים
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### התאמות מאושרות
+- **צפייה בהתאמות** - רואה את כל ההתאמות שאושרו במערכת
+- **ייצוא ל-CSV** - אפשר לייצא את הרשימה לקובץ אקסל
+- **הדפסה** - אפשר להדפיס את הרשימה
 
-**Use GitHub Codespaces**
+### דוחות וניתוח
+- **סטטיסטיקות כלליות** - כמה התאמות אושרו, כמה ממתינות, זמן ממוצע לאישור
+- **גרפים** - גרפים שמראים:
+  - התאמות מאושרות לפי שבוע
+  - התפלגות שפות
+  - השוואה בין ערים (כמה סטודנטים מול כמה מתנדבים)
+- **יחס ביקוש-היצע** - רואה אילו ערים יש בהן יותר ביקוש (סטודנטים) מאשר היצע (מתנדבים)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### לוג התראות
+- **מעקב אחר התראות** - רואה את כל ההתראות שנשלחו לסטודנטים ומתנדבים
+- **סטטוס שליחות** - רואה אם ההתראה נשלחה בהצלחה, נכשלה או עדיין ממתינה
 
-## What technologies are used for this project?
+## טיפים לשימוש
 
-This project is built with:
+1. **עדכן נתונים באופן קבוע** - ודא שהפרטים של סטודנטים ומתנדבים מעודכנים
+2. **בדוק התאמות בקפידה** - המערכת מציעה התאמות, אבל אתה צריך לאשר אותן
+3. **עקוב אחר הקיבולת** - ודא שמתנדבים לא מקבלים יותר מדי סטודנטים
+4. **השתמש בדוחות** - הדוחות עוזרים להבין איפה יש צורך בעוד מתנדבים
+5. **העלה קבצים מסודרים** - כשמעלים קובץ אקסל, ודא שהעמודות ברורות ומובנות
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## שאלות נפוצות
 
-## How can I deploy this project?
+**ש: מה קורה אם אני מאשר התאמה אבל אחר כך רוצה לשנות?**
+ת: בינתיים אין אפשרות לשנות התאמה שכבר אושרה. צריך לדחות אותה וליצור התאמה חדשה.
 
-Simply open [Lovable](https://lovable.dev/projects/c9a96343-f276-4c2f-b6fe-14606a94f84d) and click on Share -> Publish.
+**ש: כמה סטודנטים יכול מתנדב לקבל?**
+ת: זה תלוי בקיבולת שמוגדרת למתנדב. כל מתנדב יכול לקבוע כמה סטודנטים הוא יכול לקחת.
 
-## Can I connect a custom domain to my Lovable project?
+**ש: האם המערכת שולחת התראות אוטומטיות?**
+ת: המערכת יכולה לשלוח התראות, אבל זה תלוי בהגדרות. אפשר לראות את כל ההתראות בלוג התראות.
 
-Yes, you can!
+**ש: מה קורה אם אין התאמות טובות?**
+ת: המערכת יצרה רק התאמות עם ציון מינימלי של 60. אם אין התאמות, זה אומר שאין סטודנטים או מתנדבים שמתאימים לקריטריונים.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## גישה לאתר
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+האתר מוגן בסיסמה כדי למנוע גישה לא מורשית.
+
+### התחברות ראשונה
+1. בעת פתיחת האתר, תוצג מסך התחברות
+2. הזן את הסיסמה כדי לגשת למערכת
+3. האימות תקף ל-24 שעות או עד סגירת הדפדפן
+
+### שינוי סיסמה
+שינוי הסיסמה מתבצע על ידי המפתח בקובץ `src/components/Login.tsx`.
+
+## תכונות נוספות
+
+### תמיכה ב-RTL
+המערכת מותאמת באופן מלא לעברית וכוללת:
+- כיוון טקסט מימין לשמאל
+- פריסת אלמנטים מותאמת לעברית
+- תמיכה מלאה בטקסט עברי
+
+### תמיכה במובייל וטאבלט
+המערכת מותאמת לנייד ולטאבלט:
+- עיצוב responsive לכל המסכים
+- טבלאות עם גלילה אופקית במובייל
+- כפתורים וטקסטים מותאמים למסך קטן
+- תמיכה מלאה בטאבלטים
+
+## תמיכה
+
+אם יש לך שאלות או בעיות:
+- פנה למנהל המערכת
+- צור issue ב-[GitHub Repository](https://github.com/ZyrticX/shiduch-smart)
+- צור Pull Request אם יש לך שיפורים
+
+## קישורים שימושיים
+
+- **Repository GitHub**: [https://github.com/ZyrticX/shiduch-smart](https://github.com/ZyrticX/shiduch-smart)
+- **תיעוד טכני**: ראה קובץ `TECHNICAL.md`
+
+---
+
+**גרסה:** 1.0  
+**עדכון אחרון:** 2025  
+**Repository**: [ZyrticX/shiduch-smart](https://github.com/ZyrticX/shiduch-smart)

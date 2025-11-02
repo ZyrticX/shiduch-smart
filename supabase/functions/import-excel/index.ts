@@ -1,3 +1,5 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -5,7 +7,7 @@ const corsHeaders = {
 
 interface ImportRequest {
   data: {
-    table: 'students' | 'volunteers';
+    table: 'students' | 'users';
     rows: any[];
   }[];
 }
@@ -18,6 +20,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
     const { data: requestData } = await req.json() as { data: ImportRequest['data'] };
 
@@ -25,7 +28,7 @@ Deno.serve(async (req) => {
       throw new Error('Invalid request format');
     }
 
-    let totalInserted = 0;
+    let totalUpserted = 0;
 
     for (const tableData of requestData) {
       const { table, rows } = tableData;
@@ -66,9 +69,13 @@ Deno.serve(async (req) => {
           if (row['בקשות מיוחדות'] || row['special_requests']) {
             mapped.special_requests = row['בקשות מיוחדות'] || row['special_requests'];
           }
-        } else if (table === 'volunteers') {
-          if (row['קיבולת'] || row['capacity']) {
-            mapped.capacity = parseInt(row['קיבולת'] || row['capacity']) || 1;
+        } else if (table === 'users') {
+          if (row['קיבולת מקסימלית'] || row['capacity_max'] || row['capacity']) {
+            mapped.capacity_max = parseInt(row['קיבולת מקסימלית'] || row['capacity_max'] || row['capacity']) || 1;
+          }
+          if (row['מלגה פעילה'] || row['scholarship_active']) {
+            const scholarshipValue = row['מלגה פעילה'] || row['scholarship_active'];
+            mapped.scholarship_active = scholarshipValue === true || scholarshipValue === 'true' || scholarshipValue === 'כן' || scholarshipValue === '1';
           }
         }
 
@@ -82,46 +89,37 @@ Deno.serve(async (req) => {
 
       console.log(`Valid rows: ${validRows.length} out of ${mappedRows.length}`);
       
-      // Log invalid rows for debugging
       if (validRows.length === 0 && mappedRows.length > 0) {
         console.log('Sample invalid row:', JSON.stringify(mappedRows[0]));
       }
 
-      console.log(`Inserting ${validRows.length} valid rows into ${table}`);
+      console.log(`Upserting ${validRows.length} valid rows into ${table}`);
 
       if (validRows.length > 0) {
-        // Use direct fetch to insert data
-        const insertResponse = await fetch(
-          `${supabaseUrl}/rest/v1/${table}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': supabaseKey,
-              'Authorization': `Bearer ${supabaseKey}`,
-              'Prefer': 'return=representation'
-            },
-            body: JSON.stringify(validRows)
-          }
-        );
+        // Use upsert based on email (unique constraint)
+        const { data: upsertedData, error: upsertError } = await supabaseClient
+          .from(table)
+          .upsert(validRows, {
+            onConflict: 'email',
+            ignoreDuplicates: false
+          })
+          .select();
 
-        if (!insertResponse.ok) {
-          const errorText = await insertResponse.text();
-          console.error(`Error inserting into ${table}:`, errorText);
-          throw new Error(`Failed to insert into ${table}: ${errorText}`);
+        if (upsertError) {
+          console.error(`Error upserting into ${table}:`, upsertError);
+          throw new Error(`Failed to upsert into ${table}: ${upsertError.message}`);
         }
 
-        const insertedData = await insertResponse.json();
-        totalInserted += insertedData.length || 0;
-        console.log(`Successfully inserted ${insertedData.length} rows into ${table}`);
+        totalUpserted += upsertedData?.length || 0;
+        console.log(`Successfully upserted ${upsertedData?.length || 0} rows into ${table}`);
       }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        inserted: totalInserted,
-        message: `Successfully imported ${totalInserted} records`,
+        inserted: totalUpserted,
+        message: `Successfully imported ${totalUpserted} records`,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

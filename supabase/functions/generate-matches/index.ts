@@ -18,16 +18,17 @@ interface Student {
   is_matched: boolean;
 }
 
-interface Volunteer {
+interface User {
   id: string;
   full_name: string;
   city: string;
   native_language: string;
   gender: string | null;
-  capacity: number;
-  current_matches: number;
+  capacity_max: number;
+  current_students: number;
   latitude: number | null;
   longitude: number | null;
+  scholarship_active: boolean;
   is_active: boolean;
 }
 
@@ -54,14 +55,14 @@ function calculateDistance(
 // Calculate match score based on criteria
 function calculateMatchScore(
   student: Student,
-  volunteer: Volunteer,
+  user: User,
   distance: number
 ): { score: number; reason: string } {
   let score = 0;
   const reasons: string[] = [];
 
   // Language match (60 points)
-  if (student.native_language === volunteer.native_language) {
+  if (student.native_language === user.native_language) {
     score += 60;
     reasons.push(`שפת אם זהה (${student.native_language})`);
   }
@@ -76,16 +77,16 @@ function calculateMatchScore(
   }
 
   // Gender match (15 points)
-  if (student.gender && volunteer.gender && student.gender === volunteer.gender) {
+  if (student.gender && user.gender && student.gender === user.gender) {
     score += 15;
     reasons.push("התאמת מין");
   }
 
   // Special requests match (5 points)
-  if (student.special_requests && volunteer.native_language) {
+  if (student.special_requests && user.native_language) {
     const requestLower = student.special_requests.toLowerCase();
-    const volLangLower = volunteer.native_language.toLowerCase();
-    if (requestLower.includes(volLangLower) || requestLower.includes("דובר")) {
+    const userLangLower = user.native_language.toLowerCase();
+    if (requestLower.includes(userLangLower) || requestLower.includes("דובר")) {
       score += 5;
       reasons.push("התאמה לבקשות מיוחדות");
     }
@@ -128,32 +129,33 @@ serve(async (req) => {
       throw studentsError;
     }
 
-    // Load active volunteers with available capacity
-    const { data: volunteers, error: volunteersError } = await supabaseClient
-      .from("volunteers")
+    // Load active users with available capacity and active scholarship
+    const { data: users, error: usersError } = await supabaseClient
+      .from("users")
       .select("*")
-      .eq("is_active", true);
+      .eq("is_active", true)
+      .eq("scholarship_active", true);
 
-    if (volunteersError) {
-      console.error("Error loading volunteers:", volunteersError);
-      throw volunteersError;
+    if (usersError) {
+      console.error("Error loading users:", usersError);
+      throw usersError;
     }
 
-    // Filter volunteers with available capacity
-    const availableVolunteers = volunteers.filter(
-      (v: Volunteer) => v.current_matches < v.capacity
+    // Filter users with available capacity
+    const availableUsers = users.filter(
+      (u: User) => u.current_students < u.capacity_max
     );
 
     console.log(`Found ${students.length} unmatched students`);
-    console.log(`Found ${availableVolunteers.length} available volunteers`);
+    console.log(`Found ${availableUsers.length} available users`);
 
-    if (students.length === 0 || availableVolunteers.length === 0) {
+    if (students.length === 0 || availableUsers.length === 0) {
       return new Response(
         JSON.stringify({ 
           suggestedCount: 0,
           message: students.length === 0 
             ? "אין סטודנטים ממתינים" 
-            : "אין מתנדבים זמינים"
+            : "אין משתמשים זמינים"
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -165,30 +167,30 @@ serve(async (req) => {
     // Generate matches
     const matches = [];
     const usedStudents = new Set<string>();
-    const volunteerCapacity = new Map<string, number>();
+    const userCapacity = new Map<string, number>();
 
-    // Initialize volunteer capacity tracking
-    availableVolunteers.forEach((v: Volunteer) => {
-      volunteerCapacity.set(v.id, v.capacity - v.current_matches);
+    // Initialize user capacity tracking
+    availableUsers.forEach((u: User) => {
+      userCapacity.set(u.id, u.capacity_max - u.current_students);
     });
 
     // Calculate all possible matches
     const possibleMatches = [];
     for (const student of students as Student[]) {
-      for (const volunteer of availableVolunteers as Volunteer[]) {
+      for (const user of availableUsers as User[]) {
         // Calculate distance
         let distance = 0;
         if (
           student.latitude &&
           student.longitude &&
-          volunteer.latitude &&
-          volunteer.longitude
+          user.latitude &&
+          user.longitude
         ) {
           distance = calculateDistance(
             student.latitude,
             student.longitude,
-            volunteer.latitude,
-            volunteer.longitude
+            user.latitude,
+            user.longitude
           );
         }
 
@@ -197,7 +199,7 @@ serve(async (req) => {
           continue;
         }
 
-        const { score, reason } = calculateMatchScore(student, volunteer, distance);
+        const { score, reason } = calculateMatchScore(student, user, distance);
 
         // Skip if below minimum score
         if (score < minScore) {
@@ -206,7 +208,7 @@ serve(async (req) => {
 
         possibleMatches.push({
           student_id: student.id,
-          volunteer_id: volunteer.id,
+          user_id: user.id,
           score,
           reason,
           distance,
@@ -226,8 +228,8 @@ serve(async (req) => {
         continue;
       }
 
-      // Check volunteer capacity
-      const capacity = volunteerCapacity.get(match.volunteer_id) || 0;
+      // Check user capacity
+      const capacity = userCapacity.get(match.user_id) || 0;
       if (capacity <= 0) {
         continue;
       }
@@ -237,20 +239,20 @@ serve(async (req) => {
         .from("matches")
         .select("id")
         .eq("student_id", match.student_id)
-        .eq("volunteer_id", match.volunteer_id)
+        .eq("user_id", match.user_id)
         .maybeSingle();
 
       if (!existingMatch) {
         matches.push({
           student_id: match.student_id,
-          volunteer_id: match.volunteer_id,
+          user_id: match.user_id,
           confidence_score: match.score,
           match_reason: match.reason,
-          status: "pending",
+          status: "Suggested", // Use Suggested status
         });
 
         usedStudents.add(match.student_id);
-        volunteerCapacity.set(match.volunteer_id, capacity - 1);
+        userCapacity.set(match.user_id, capacity - 1);
 
         // Stop if we reached the limit
         if (matches.length >= limit) {

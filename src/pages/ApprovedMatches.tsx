@@ -17,12 +17,12 @@ import { useNavigate } from "react-router-dom";
 interface ApprovedMatch {
   id: string;
   student_id: string;
-  volunteer_id: string;
+  user_id: string;
   confidence_score: number;
   match_reason: string;
   approved_at: string;
   students: { full_name: string; email: string; city: string } | null;
-  volunteers: { full_name: string; email: string; city: string } | null;
+  users: { full_name: string; email: string; city: string } | null;
 }
 
 const ApprovedMatches = () => {
@@ -51,7 +51,7 @@ const ApprovedMatches = () => {
       .select(`
         *,
         students(full_name, email, city),
-        volunteers(full_name, email, city)
+        users(full_name, email, city)
       `)
       .eq('status', 'approved')
       .order('approved_at', { ascending: false });
@@ -74,11 +74,11 @@ const ApprovedMatches = () => {
     // Create CSV header
     const headers = [
       "student_id",
-      "volunteer_id", 
+      "user_id", 
       "student_name",
-      "volunteer_name",
+      "user_name",
       "student_city",
-      "volunteer_city",
+      "user_city",
       "confidence_score",
       "match_reason",
       "approved_at"
@@ -87,11 +87,11 @@ const ApprovedMatches = () => {
     // Create CSV rows
     const rows = matches.map(match => [
       match.student_id,
-      match.volunteer_id,
+      match.user_id,
       match.students?.full_name || "",
-      match.volunteers?.full_name || "",
+      match.users?.full_name || "",
       match.students?.city || "",
-      match.volunteers?.city || "",
+      match.users?.city || "",
       match.confidence_score,
       `"${match.match_reason.replace(/"/g, '""')}"`, // Escape quotes
       new Date(match.approved_at).toLocaleString('he-IL')
@@ -132,11 +132,11 @@ const ApprovedMatches = () => {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <div className="container mx-auto p-6 space-y-6">
+    <div className="min-h-screen bg-secondary/30" dir="rtl">
+      <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between print:hidden">
-          <div className="text-right">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 print:hidden">
+          <div className="text-right w-full sm:w-auto">
             <Button
               variant="ghost"
               onClick={() => navigate('/')}
@@ -145,30 +145,32 @@ const ApprovedMatches = () => {
               <ArrowRight className="h-4 w-4" />
               חזרה לדשבורד
             </Button>
-            <h1 className="text-4xl font-bold text-foreground mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
               התאמות מאושרות
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               סה״כ {matches.length} התאמות מאושרות
             </p>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             <Button 
               onClick={exportToCSV}
               variant="outline"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial"
             >
               <FileDown className="h-4 w-4" />
-              ייצא CSV
+              <span className="hidden sm:inline">ייצא CSV</span>
+              <span className="sm:hidden">CSV</span>
             </Button>
             <Button 
               onClick={handlePrint}
               variant="outline"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial"
             >
               <Printer className="h-4 w-4" />
-              הדפס
+              <span className="hidden sm:inline">הדפס</span>
+              <span className="sm:hidden">הדפס</span>
             </Button>
           </div>
         </div>
@@ -198,17 +200,17 @@ const ApprovedMatches = () => {
                 <p className="text-lg">אין התאמות מאושרות</p>
               </div>
             ) : (
-              <div className="rounded-md border print:border-gray-300">
+              <div className="rounded-md border print:border-gray-300 overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-right">סטודנט</TableHead>
-                      <TableHead className="text-right">מתנדב</TableHead>
-                      <TableHead className="text-right">עיר</TableHead>
-                      <TableHead className="text-right print:hidden">ציון התאמה</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">סטודנט</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">משתמש</TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">עיר</TableHead>
+                      <TableHead className="text-right print:hidden whitespace-nowrap hidden md:table-cell">ציון התאמה</TableHead>
                       <TableHead className="text-right hidden print:table-cell">ציון</TableHead>
-                      <TableHead className="text-right">סיבת התאמה</TableHead>
-                      <TableHead className="text-right">תאריך אישור</TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">סיבת התאמה</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">תאריך אישור</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -217,36 +219,36 @@ const ApprovedMatches = () => {
                         <TableCell className="font-medium">
                           <div>
                             <div>{match.students?.full_name || "N/A"}</div>
-                            <div className="text-xs text-muted-foreground print:hidden">
+                            <div className="text-xs text-muted-foreground print:hidden sm:hidden">
                               {match.students?.email}
                             </div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div>
-                            <div>{match.volunteers?.full_name || "N/A"}</div>
-                            <div className="text-xs text-muted-foreground print:hidden">
-                              {match.volunteers?.email}
+                            <div>{match.users?.full_name || "N/A"}</div>
+                            <div className="text-xs text-muted-foreground print:hidden sm:hidden">
+                              {match.users?.email}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <div className="text-sm">
                             <div>{match.students?.city}</div>
-                            <div className="text-muted-foreground">{match.volunteers?.city}</div>
+                            <div className="text-muted-foreground">{match.users?.city}</div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-center hidden md:table-cell print:hidden">
                           <span className="font-semibold text-primary">
                             {match.confidence_score}%
                           </span>
                         </TableCell>
-                        <TableCell className="max-w-md">
+                        <TableCell className="max-w-md hidden lg:table-cell">
                           <p className="text-sm text-muted-foreground line-clamp-2 print:line-clamp-none">
                             {match.match_reason}
                           </p>
                         </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-sm whitespace-nowrap">
                           {new Date(match.approved_at).toLocaleDateString('he-IL')}
                         </TableCell>
                       </TableRow>

@@ -10,7 +10,7 @@ import { toast } from "sonner";
 
 interface SheetMapping {
   sheetName: string;
-  targetTable: "students" | "volunteers";
+  targetTable: "students" | "users";
   columnMapping: Record<string, string>;
   enabled: boolean;
 }
@@ -48,7 +48,7 @@ export function ExcelUpload() {
     reader.readAsBinaryString(selectedFile);
   };
 
-  const updateSheetMapping = (sheetIndex: number, targetTable: "students" | "volunteers") => {
+  const updateSheetMapping = (sheetIndex: number, targetTable: "students" | "users") => {
     const newMappings = [...mappings];
     newMappings[sheetIndex].targetTable = targetTable;
     setMappings(newMappings);
@@ -143,21 +143,23 @@ export function ExcelUpload() {
           <div className="space-y-4">
             <div className="text-sm font-medium">גיליונות שנמצאו ({sheets.length})</div>
             {mappings.map((mapping, index) => (
-              <div key={mapping.sheetName} className="flex items-center gap-4 p-3 border rounded-lg">
-                <input
-                  type="checkbox"
-                  checked={mapping.enabled}
-                  onChange={() => toggleSheetEnabled(index)}
-                  className="h-4 w-4"
-                />
-                <div className="flex-1">
-                  <div className="font-medium">{mapping.sheetName}</div>
+              <div key={mapping.sheetName} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-3 border rounded-lg">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <input
+                    type="checkbox"
+                    checked={mapping.enabled}
+                    onChange={() => toggleSheetEnabled(index)}
+                    className="h-4 w-4"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium">{mapping.sheetName}</div>
+                  </div>
                 </div>
-                <div className="w-48">
+                <div className="w-full sm:w-48">
                   <Select
                     value={mapping.targetTable}
                     onValueChange={(value) =>
-                      updateSheetMapping(index, value as "students" | "volunteers")
+                      updateSheetMapping(index, value as "students" | "users")
                     }
                     disabled={!mapping.enabled}
                   >
@@ -166,7 +168,7 @@ export function ExcelUpload() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="students">תלמידים</SelectItem>
-                      <SelectItem value="volunteers">מתנדבים</SelectItem>
+                      <SelectItem value="users">משתמשים</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

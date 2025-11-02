@@ -108,11 +108,11 @@ const AuditLogs = () => {
   }
 
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <div className="container mx-auto p-6 space-y-6">
+    <div className="min-h-screen bg-secondary/30" dir="rtl">
+      <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="text-right">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="text-right w-full sm:w-auto">
             <Button
               variant="ghost"
               onClick={() => navigate('/')}
@@ -121,10 +121,10 @@ const AuditLogs = () => {
               <ArrowRight className="h-4 w-4" />
               חזרה לדשבורד
             </Button>
-            <h1 className="text-4xl font-bold text-foreground mb-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
               לוג התראות
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               מעקב אחר כל ההתראות שנשלחו במערכת
             </p>
           </div>
@@ -187,25 +187,25 @@ const AuditLogs = () => {
                 <p className="text-lg">אין לוגים עדיין</p>
               </div>
             ) : (
-              <div className="rounded-md border">
+              <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-right">תאריך</TableHead>
-                      <TableHead className="text-right">סוג פעולה</TableHead>
-                      <TableHead className="text-right">נמען</TableHead>
-                      <TableHead className="text-right">ערוץ</TableHead>
-                      <TableHead className="text-right">סטטוס</TableHead>
-                      <TableHead className="text-right">פרטים</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">תאריך</TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">סוג פעולה</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">נמען</TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden md:table-cell">ערוץ</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">סטטוס</TableHead>
+                      <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">פרטים</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {logs.map((log) => (
                       <TableRow key={log.id}>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-sm whitespace-nowrap">
                           {new Date(log.created_at).toLocaleString('he-IL')}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden sm:table-cell">
                           <span className="text-sm">
                             {log.action === 'match_approved_notification' 
                               ? 'התראת אישור התאמה' 
@@ -217,7 +217,7 @@ const AuditLogs = () => {
                             {log.recipient_email && (
                               <div className="flex items-center gap-1">
                                 <Mail className="h-3 w-3" />
-                                {log.recipient_email}
+                                <span className="truncate max-w-[150px] sm:max-w-none">{log.recipient_email}</span>
                               </div>
                             )}
                             {log.recipient_phone && (
@@ -227,7 +227,7 @@ const AuditLogs = () => {
                             )}
                           </div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="hidden md:table-cell">
                           <div className="flex items-center gap-1">
                             {getChannelIcon(log.notification_channel)}
                             <span className="text-sm">
@@ -241,7 +241,7 @@ const AuditLogs = () => {
                             {getStatusBadge(log.status)}
                           </div>
                         </TableCell>
-                        <TableCell className="max-w-xs">
+                        <TableCell className="max-w-xs hidden lg:table-cell">
                           {log.error_message ? (
                             <p className="text-xs text-red-600 line-clamp-2">
                               {log.error_message}

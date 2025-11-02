@@ -43,7 +43,7 @@ serve(async (req) => {
       .select(`
         *,
         students(id, is_matched, full_name),
-        volunteers(id, capacity, current_matches, full_name)
+        users(id, capacity_max, current_students, full_name)
       `)
       .eq("id", matchId)
       .single();
@@ -60,7 +60,7 @@ serve(async (req) => {
     }
 
     // Check if match is already processed
-    if (match.status !== "pending") {
+    if (match.status !== "pending" && match.status !== "Suggested") {
       return new Response(
         JSON.stringify({ 
           error: `ההתאמה כבר ${match.status === 'approved' ? 'אושרה' : 'נדחתה'}`,
@@ -74,11 +74,11 @@ serve(async (req) => {
     }
 
     if (action === "approve") {
-      // Check volunteer capacity
-      const volunteer = match.volunteers as any;
-      if (!volunteer) {
+      // Check user capacity
+      const user = match.users as any;
+      if (!user) {
         return new Response(
-          JSON.stringify({ error: "מתנדב לא נמצא" }),
+          JSON.stringify({ error: "משתמש לא נמצא" }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
             status: 404,
@@ -86,13 +86,13 @@ serve(async (req) => {
         );
       }
 
-      if (volunteer.current_matches >= volunteer.capacity) {
+      if (user.current_students >= user.capacity_max) {
         return new Response(
           JSON.stringify({ 
-            error: "המתנדב הגיע למכסה המקסימלית",
-            volunteerName: volunteer.full_name,
-            capacity: volunteer.capacity,
-            currentMatches: volunteer.current_matches
+            error: "המשתמש הגיע למכסה המקסימלית",
+            userName: user.full_name,
+            capacity: user.capacity_max,
+            currentStudents: user.current_students
           }),
           {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -134,15 +134,15 @@ serve(async (req) => {
           approved_at: new Date().toISOString()
         })
         .eq("id", matchId)
-        .eq("status", "pending"); // Double-check it's still pending
+        .in("status", ["pending", "Suggested"]); // Double-check it's still pending or Suggested
 
       if (updateMatchError) {
         console.error("Error updating match:", updateMatchError);
         throw updateMatchError;
       }
 
-      // The trigger update_volunteer_capacity will automatically:
-      // - Increment volunteer.current_matches
+      // The trigger update_user_capacity will automatically:
+      // - Increment user.current_students
       // - Mark student.is_matched = true
 
       console.log(`Match ${matchId} approved successfully`);
@@ -178,7 +178,7 @@ serve(async (req) => {
           status: "rejected"
         })
         .eq("id", matchId)
-        .eq("status", "pending"); // Double-check it's still pending
+        .in("status", ["pending", "Suggested"]); // Double-check it's still pending or Suggested
 
       if (updateError) {
         console.error("Error rejecting match:", updateError);

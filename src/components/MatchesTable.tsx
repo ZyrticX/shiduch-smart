@@ -18,12 +18,12 @@ import { Input } from "@/components/ui/input";
 interface Match {
   id: string;
   student_id: string;
-  volunteer_id: string;
+  user_id: string;
   confidence_score: number;
   match_reason: string;
   status: string;
   students: { full_name: string; city: string } | null;
-  volunteers: { full_name: string; city: string } | null;
+  users: { full_name: string; city: string } | null;
 }
 
 const MatchesTable = () => {
@@ -52,9 +52,9 @@ const MatchesTable = () => {
       .select(`
         *,
         students(full_name, city),
-        volunteers(full_name, city)
+        users(full_name, city)
       `)
-      .eq('status', 'pending')
+      .eq('status', 'Suggested')
       .order('confidence_score', { ascending: false });
 
     if (error) {
@@ -92,9 +92,9 @@ const MatchesTable = () => {
     const searchLower = searchTerm.toLowerCase();
     return (
       match.students?.full_name.toLowerCase().includes(searchLower) ||
-      match.volunteers?.full_name.toLowerCase().includes(searchLower) ||
+      match.users?.full_name.toLowerCase().includes(searchLower) ||
       match.students?.city.toLowerCase().includes(searchLower) ||
-      match.volunteers?.city.toLowerCase().includes(searchLower)
+      match.users?.city.toLowerCase().includes(searchLower)
     );
   });
 
@@ -116,35 +116,36 @@ const MatchesTable = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4 flex-row-reverse justify-end">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 justify-end">
         <Input
           placeholder="חיפוש לפי שם, עיר..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm text-right"
+          className="w-full sm:max-w-sm text-right"
         />
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2 w-full sm:w-auto">
           <FileDown className="h-4 w-4" />
-          ייצא CSV
+          <span className="hidden sm:inline">ייצא CSV</span>
+          <span className="sm:hidden">CSV</span>
         </Button>
       </div>
 
       {filteredMatches.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg">אין התאמות ממתינות</p>
+          <p className="text-lg">אין התאמות מוצעות</p>
           <p className="text-sm mt-2">הפעל את מנגנון ההתאמה החכם כדי ליצור התאמות חדשות</p>
         </div>
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="text-right">סטודנט</TableHead>
-                <TableHead className="text-right">מתנדב</TableHead>
-                <TableHead className="text-right">עיר</TableHead>
-                <TableHead className="text-right">ציון התאמה</TableHead>
-                <TableHead className="text-right">סיבת התאמה</TableHead>
-                <TableHead className="text-center">פעולות</TableHead>
+                <TableHead className="text-right whitespace-nowrap">סטודנט</TableHead>
+                <TableHead className="text-right whitespace-nowrap">משתמש</TableHead>
+                <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">עיר</TableHead>
+                <TableHead className="text-right whitespace-nowrap">ציון התאמה</TableHead>
+                <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">סיבת התאמה</TableHead>
+                <TableHead className="text-center whitespace-nowrap">פעולות</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -153,19 +154,19 @@ const MatchesTable = () => {
                   <TableCell className="font-medium">
                     {match.students?.full_name || "N/A"}
                   </TableCell>
-                  <TableCell>{match.volunteers?.full_name || "N/A"}</TableCell>
-                  <TableCell>
+                  <TableCell>{match.users?.full_name || "N/A"}</TableCell>
+                  <TableCell className="hidden sm:table-cell">
                     <div className="text-sm">
                       <div>{match.students?.city}</div>
-                      <div className="text-muted-foreground">{match.volunteers?.city}</div>
+                      <div className="text-muted-foreground">{match.users?.city}</div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-[80px]">
                       <div className="flex items-center gap-2">
                         <Badge 
                           variant="secondary" 
-                          className={`${getScoreBgColor(match.confidence_score)} ${getScoreColor(match.confidence_score)}`}
+                          className={`${getScoreBgColor(match.confidence_score)} ${getScoreColor(match.confidence_score)} text-xs`}
                         >
                           {match.confidence_score}%
                         </Badge>
@@ -173,34 +174,34 @@ const MatchesTable = () => {
                       <Progress value={match.confidence_score} className="h-1.5" />
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-xs">
+                  <TableCell className="max-w-xs hidden lg:table-cell">
                     <p className="text-sm text-muted-foreground line-clamp-2">
                       {match.match_reason || "אין נימוק"}
                     </p>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap">
                       <Button
                         size="sm"
                         variant="default"
-                        className="gap-1"
+                        className="gap-1 text-xs sm:text-sm"
                         onClick={() => updateMatchStatus(match.id, 'approve')}
                       >
-                        <Check className="h-4 w-4" />
-                        אשר
+                        <Check className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="hidden sm:inline">אשר</span>
                       </Button>
                       <Button
                         size="sm"
                         variant="destructive"
-                        className="gap-1"
+                        className="gap-1 text-xs sm:text-sm"
                         onClick={() => updateMatchStatus(match.id, 'reject')}
                       >
-                        <X className="h-4 w-4" />
-                        דחה
+                        <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="hidden sm:inline">דחה</span>
                       </Button>
-                      <Button size="sm" variant="outline" className="gap-1">
-                        <Edit className="h-4 w-4" />
-                        ערוך
+                      <Button size="sm" variant="outline" className="gap-1 text-xs sm:text-sm hidden md:inline-flex">
+                        <Edit className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="hidden sm:inline">ערוך</span>
                       </Button>
                     </div>
                   </TableCell>

@@ -166,32 +166,33 @@ export default function Students() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-8" dir="rtl">
+    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8" dir="rtl">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold">ניהול סטודנטים</h1>
-            <p className="text-muted-foreground mt-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 md:mb-8 gap-4">
+          <div className="w-full sm:w-auto">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">ניהול סטודנטים</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-2">
               {filteredStudents.length} סטודנטים מתוך {students.length}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={() => navigate("/")} variant="outline">
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button onClick={() => navigate("/")} variant="outline" className="flex-1 sm:flex-initial">
               <ArrowRight className="ml-2 h-4 w-4" />
-              חזרה לדף הראשי
+              <span className="hidden sm:inline">חזרה לדף הראשי</span>
+              <span className="sm:hidden">חזרה</span>
             </Button>
-            <Button onClick={handleNew}>
+            <Button onClick={handleNew} className="flex-1 sm:flex-initial">
               <Plus className="ml-2 h-4 w-4" />
               הוסף סטודנט
             </Button>
           </div>
         </div>
 
-        <div className="bg-card rounded-lg shadow-sm border p-6 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
+        <div className="bg-card rounded-lg shadow-sm border p-4 sm:p-6 mb-4 sm:mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="sm:col-span-2">
               <div className="relative">
-                <Search className="absolute right-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="חיפוש לפי שם, אימייל או טלפון..."
                   value={searchTerm}
@@ -226,63 +227,65 @@ export default function Students() {
         </div>
 
         <div className="bg-card rounded-lg shadow-sm border overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-right">שם מלא</TableHead>
-                <TableHead className="text-right">אימייל</TableHead>
-                <TableHead className="text-right">טלפון</TableHead>
-                <TableHead className="text-right">עיר</TableHead>
-                <TableHead className="text-right">שפת אם</TableHead>
-                <TableHead className="text-right">מין</TableHead>
-                <TableHead className="text-right">שובץ</TableHead>
-                <TableHead className="text-right">פעולות</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    טוען...
-                  </TableCell>
+                  <TableHead className="text-right whitespace-nowrap">שם מלא</TableHead>
+                  <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">אימייל</TableHead>
+                  <TableHead className="text-right whitespace-nowrap hidden md:table-cell">טלפון</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">עיר</TableHead>
+                  <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">שפת אם</TableHead>
+                  <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">מין</TableHead>
+                  <TableHead className="text-right whitespace-nowrap hidden md:table-cell">שובץ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">פעולות</TableHead>
                 </TableRow>
-              ) : filteredStudents.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    לא נמצאו סטודנטים
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredStudents.map((student) => (
-                  <TableRow key={student.id}>
-                    <TableCell className="font-medium">{student.full_name}</TableCell>
-                    <TableCell>{student.email}</TableCell>
-                    <TableCell>{student.phone || "-"}</TableCell>
-                    <TableCell>{student.city}</TableCell>
-                    <TableCell>{student.native_language}</TableCell>
-                    <TableCell>{student.gender || "-"}</TableCell>
-                    <TableCell>
-                      <span className={`inline-flex px-2 py-1 rounded text-xs ${
-                        student.is_matched ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                      }`}>
-                        {student.is_matched ? "כן" : "לא"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEdit(student)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => handleDelete(student.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      טוען...
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8">
+                      לא נמצאו סטודנטים
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredStudents.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">{student.full_name}</TableCell>
+                      <TableCell className="hidden sm:table-cell">{student.email}</TableCell>
+                      <TableCell className="hidden md:table-cell">{student.phone || "-"}</TableCell>
+                      <TableCell>{student.city}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{student.native_language}</TableCell>
+                      <TableCell className="hidden lg:table-cell">{student.gender || "-"}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <span className={`inline-flex px-2 py-1 rounded text-xs ${
+                          student.is_matched ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                        }`}>
+                          {student.is_matched ? "כן" : "לא"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(student)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={() => handleDelete(student.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       </div>
 

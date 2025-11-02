@@ -114,6 +114,12 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    direction: rtl;
+    text-align: right;
+  }
+
+  html {
+    direction: rtl;
   }
 }
 

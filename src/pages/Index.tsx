@@ -14,8 +14,8 @@ const Index = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState({
     waitingStudents: 0,
-    activeVolunteers: 0,
-    pendingMatches: 0,
+    activeUsers: 0,
+    suggestedMatches: 0,
     approvedMatches: 0,
   });
   const [isMatching, setIsMatching] = useState(false);
@@ -27,7 +27,7 @@ const Index = () => {
     const channel = supabase
       .channel('stats-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, loadStats)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteers' }, loadStats)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, loadStats)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'matches' }, loadStats)
       .subscribe();
 
@@ -37,17 +37,17 @@ const Index = () => {
   }, []);
 
   const loadStats = async () => {
-    const [studentsRes, volunteersRes, pendingRes, approvedRes] = await Promise.all([
+    const [studentsRes, usersRes, suggestedRes, approvedRes] = await Promise.all([
       supabase.from('students').select('id', { count: 'exact' }).eq('is_matched', false),
-      supabase.from('volunteers').select('id', { count: 'exact' }).eq('is_active', true),
-      supabase.from('matches').select('id', { count: 'exact' }).eq('status', 'pending'),
+      supabase.from('users').select('id', { count: 'exact' }).eq('is_active', true).eq('scholarship_active', true),
+      supabase.from('matches').select('id', { count: 'exact' }).eq('status', 'Suggested'),
       supabase.from('matches').select('id', { count: 'exact' }).eq('status', 'approved'),
     ]);
 
     setStats({
       waitingStudents: studentsRes.count || 0,
-      activeVolunteers: volunteersRes.count || 0,
-      pendingMatches: pendingRes.count || 0,
+      activeUsers: usersRes.count || 0,
+      suggestedMatches: suggestedRes.count || 0,
       approvedMatches: approvedRes.count || 0,
     });
   };
@@ -78,63 +78,68 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-secondary/30">
-      <div className="container mx-auto p-6 space-y-6">
+    <div className="min-h-screen bg-secondary/30" dir="rtl">
+      <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="text-right">
-            <h1 className="text-4xl font-bold text-foreground mb-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="text-right w-full sm:w-auto">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
               מערכת שיבוץ חכמה
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               ניהול שיבוצים אוטומטי בין סטודנטים למתנדבים
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <Button 
               onClick={runMatchingAlgorithm}
               disabled={isMatching}
               size="lg"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
             >
-              <Sparkles className="h-5 w-5" />
-              הפעל התאמה חכמה
+              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden sm:inline">הפעל התאמה חכמה</span>
+              <span className="sm:hidden">התאמה</span>
             </Button>
             <Button 
               onClick={() => navigate('/analytics')}
               variant="outline"
               size="lg"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
             >
-              <BarChart3 className="h-5 w-5" />
-              דוחות וניתוח
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden md:inline">דוחות וניתוח</span>
+              <span className="md:hidden">דוחות</span>
             </Button>
             <Button 
               onClick={() => navigate('/students')}
               variant="outline"
               size="lg"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
             >
-              <GraduationCap className="h-5 w-5" />
-              ניהול סטודנטים
+              <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden md:inline">ניהול סטודנטים</span>
+              <span className="md:hidden">סטודנטים</span>
             </Button>
             <Button 
-              onClick={() => navigate('/volunteers')}
+              onClick={() => navigate('/users')}
               variant="outline"
               size="lg"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
             >
-              <Heart className="h-5 w-5" />
-              ניהול מתנדבים
+              <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden md:inline">ניהול משתמשים</span>
+              <span className="md:hidden">משתמשים</span>
             </Button>
             <Button 
               onClick={() => navigate('/audit-logs')}
               variant="outline"
               size="lg"
-              className="gap-2"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
             >
-              <FileCheck className="h-5 w-5" />
-              לוג התראות
+              <FileCheck className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden lg:inline">לוג התראות</span>
+              <span className="lg:hidden">לוגים</span>
             </Button>
           </div>
         </div>
@@ -148,14 +153,14 @@ const Index = () => {
             variant="warning"
           />
           <StatsCard
-            title="מתנדבים פעילים"
-            value={stats.activeVolunteers}
+            title="משתמשים פעילים"
+            value={stats.activeUsers}
             icon={<Users className="h-5 w-5" />}
             variant="info"
           />
           <StatsCard
-            title="התאמות ממתינות"
-            value={stats.pendingMatches}
+            title="התאמות מוצעות"
+            value={stats.suggestedMatches}
             icon={<Clock className="h-5 w-5" />}
             variant="default"
           />
