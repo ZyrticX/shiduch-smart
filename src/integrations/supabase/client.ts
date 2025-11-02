@@ -2,28 +2,29 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+// Support both VITE_ and NEXT_PUBLIC_ prefixes for compatibility
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
 
 // Validate environment variables
 if (!SUPABASE_URL) {
   throw new Error(
-    'Missing VITE_SUPABASE_URL environment variable. ' +
-    'Please set it in your .env file or Vercel environment variables.'
+    'Missing Supabase URL environment variable. ' +
+    'Please set VITE_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL in your .env file or Vercel environment variables.'
   );
 }
 
 if (!SUPABASE_PUBLISHABLE_KEY) {
   throw new Error(
-    'Missing VITE_SUPABASE_PUBLISHABLE_KEY environment variable. ' +
-    'Please set it in your .env file or Vercel environment variables.'
+    'Missing Supabase Publishable Key environment variable. ' +
+    'Please set VITE_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY in your .env file or Vercel environment variables.'
   );
 }
 
 // Validate URL format
 if (!SUPABASE_URL.startsWith('http://') && !SUPABASE_URL.startsWith('https://')) {
   throw new Error(
-    `Invalid VITE_SUPABASE_URL: "${SUPABASE_URL}". ` +
+    `Invalid Supabase URL: "${SUPABASE_URL}". ` +
     'Must be a valid HTTP or HTTPS URL.'
   );
 }
