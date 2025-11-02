@@ -70,7 +70,7 @@ export function ExcelUpload() {
 
     try {
       // Process only enabled sheets
-      const allData: { table: string; rows: any[] }[] = [];
+      const allData: { table: string; sheetName: string; rows: any[] }[] = [];
 
       mappings
         .filter((mapping) => mapping.enabled)
@@ -93,6 +93,7 @@ export function ExcelUpload() {
 
           allData.push({
             table: mapping.targetTable,
+            sheetName: mapping.sheetName,
             rows: jsonData,
           });
         });
@@ -114,7 +115,18 @@ export function ExcelUpload() {
 
       if (data?.errors && data.errors.length > 0) {
         console.error("Import errors:", data.errors);
-        toast.error(`הועלו ${data.inserted || 0} רשומות, אבל היו שגיאות: ${data.errors.join('; ')}`);
+        const errorMessage = data.errors.join('\n');
+        console.error("Detailed import errors:", errorMessage);
+        
+        // Show each error separately for better visibility
+        data.errors.forEach((err: string, index: number) => {
+          console.error(`Error ${index + 1}:`, err);
+        });
+        
+        toast.error(`הועלו ${data.inserted || 0} רשומות, אבל היו ${data.errors.length} שגיאות. ראה קונסול לפרטים.`, {
+          description: data.errors.slice(0, 2).join('; '), // Show first 2 errors in toast
+          duration: 10000, // Show for 10 seconds
+        });
       } else {
         toast.success(`הנתונים הועלו בהצלחה: ${data.inserted || 0} רשומות נוספו`);
       }

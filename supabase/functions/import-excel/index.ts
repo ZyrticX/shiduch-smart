@@ -3,18 +3,20 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 interface ImportRequest {
   data: {
     table: 'students' | 'users';
+    sheetName?: string;
     rows: any[];
   }[];
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders, status: 200 });
   }
 
   try {
@@ -32,9 +34,10 @@ Deno.serve(async (req) => {
     const errors: string[] = [];
 
     for (const tableData of requestData) {
-      const { table, rows } = tableData;
+      const { table, rows, sheetName } = tableData;
+      const sheetDisplayName = sheetName || table;
 
-      console.log(`Processing ${rows.length} rows for table: ${table}`);
+      console.log(`Processing ${rows.length} rows for table: ${table} (sheet: ${sheetDisplayName})`);
       
       // Log first row column names for debugging
       if (rows.length > 0) {
@@ -208,8 +211,14 @@ Deno.serve(async (req) => {
         console.log('Sample original row:', JSON.stringify(rows[0], null, 2));
         console.log('Available columns:', Object.keys(rows[0]));
         
-        // Add error but continue processing other tables
-        errors.push(`לא נמצאו רשומות תקינות ב-${table}. בדוק שהעמודות הבאות קיימות: שם (או שם פרטי+שם משפחה), מזהה איש קשר (או אימייל), עיר, שפת אם`);
+        // Build detailed error message with available columns
+        const availableColumns = Object.keys(rows[0]).join(', ');
+        errors.push(`[${sheetDisplayName}] לא נמצאו רשומות תקינות ב-${table}. בדוק שהעמודות הבאות קיימות: שם (או שם פרטי+שם משפחה), מזהה איש קשר (או אימייל), עיר, שפת אם. עמודות זמינות: ${availableColumns}`);
+        continue;
+      }
+
+      if (validRows.length === 0 && mappedRows.length === 0) {
+        errors.push(`[${sheetDisplayName}] גיליון ריק או לא מכיל נתונים תקינים`);
         continue;
       }
 
@@ -227,7 +236,7 @@ Deno.serve(async (req) => {
 
         if (upsertError) {
           console.error(`Error upserting into ${table}:`, upsertError);
-          errors.push(`שגיאה בעדכון ${table}: ${upsertError.message}`);
+          errors.push(`[${sheetDisplayName}] שגיאה בעדכון ${table}: ${upsertError.message}`);
           continue;
         }
 
