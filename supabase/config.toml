@@ -1,1 +1,4 @@
 project_id = "zkomiiumsrrgvkygatqm"
+
+[functions.import-excel]
+verify_jwt = false

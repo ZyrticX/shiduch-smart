@@ -7,6 +7,7 @@ import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart, Bar
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
+import { ExcelUpload } from "@/components/ExcelUpload";
 import { useNavigate } from "react-router-dom";
 
 const Index = () => {
@@ -167,6 +168,9 @@ const Index = () => {
             />
           </div>
         </div>
+
+        {/* Excel Upload */}
+        <ExcelUpload />
 
         {/* Matches Table */}
         <Card>
