@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, Save, Settings, Target, TrendingUp, Sparkles } from "lucide-react";
+import { ArrowRight, Save, Settings, Target, TrendingUp, Sparkles, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Setting {
@@ -56,15 +56,20 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Update all settings
-      const updates = settings.map((setting) =>
-        supabase
-          .from("settings")
-          .update({ value: setting.value, updated_at: new Date().toISOString() })
-          .eq("key", setting.key)
-      );
+      // Update all settings using upsert
+      const updates = settings.map((s) => ({
+        key: s.key,
+        value: s.value,
+        description: s.description,
+        category: s.category,
+      }));
 
-      await Promise.all(updates);
+      const { error } = await supabase.from("settings").upsert(updates, {
+        onConflict: "key",
+        ignoreDuplicates: false,
+      });
+
+      if (error) throw error;
 
       toast.success("ההגדרות נשמרו בהצלחה");
     } catch (error: any) {
@@ -93,16 +98,24 @@ export default function SettingsPage() {
         special_requests_points: "5",
       };
 
-      const updates = Object.entries(defaultValues).map(([key, value]) =>
-        supabase
-          .from("settings")
-          .update({ value, updated_at: new Date().toISOString() })
-          .eq("key", key)
-      );
+      const resetUpdates = Object.entries(defaultValues).map(([key, value]) => {
+        const existingSetting = settings.find(s => s.key === key);
+        return {
+          key,
+          value,
+          description: existingSetting?.description || "",
+          category: existingSetting?.category || "matching",
+        };
+      });
 
-      await Promise.all(updates);
+      const { error } = await supabase.from("settings").upsert(resetUpdates, {
+        onConflict: "key",
+        ignoreDuplicates: false,
+      });
+
+      if (error) throw error;
+
       await loadSettings();
-
       toast.success("ההגדרות אופסו לברירות מחדל");
     } catch (error: any) {
       console.error("Error resetting settings:", error);
@@ -248,12 +261,21 @@ export default function SettingsPage() {
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <Button onClick={handleSave} disabled={saving} size="lg" className="flex-1 sm:flex-initial">
-            <Save className="ml-2 h-4 w-4" />
-            {saving ? "שומר..." : "שמור הגדרות"}
-          </Button>
-          <Button onClick={resetToDefaults} variant="outline" size="lg" className="flex-1 sm:flex-initial">
+          <Button onClick={resetToDefaults} variant="outline" size="lg" className="flex-1 sm:flex-initial" disabled={saving}>
             איפוס לברירות מחדל
+          </Button>
+          <Button onClick={handleSave} disabled={saving} size="lg" className="flex-1 sm:flex-initial">
+            {saving ? (
+              <>
+                <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                שומר...
+              </>
+            ) : (
+              <>
+                <Save className="ml-2 h-4 w-4" />
+                שמור הגדרות
+              </>
+            )}
           </Button>
         </div>
       </div>
