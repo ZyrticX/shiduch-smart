@@ -69,3 +69,5 @@ npm run build
 - [Vercel Environment Variables Docs](https://vercel.com/docs/concepts/projects/environment-variables)
 - [Vite Environment Variables](https://vitejs.dev/guide/env-and-mode.html)
 
+
+

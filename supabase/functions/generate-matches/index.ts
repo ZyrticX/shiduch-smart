@@ -80,9 +80,12 @@ function calculateMatchScore(
   if (distance === 0) {
     score += scoringConfig.sameCityPoints;
     reasons.push(`אותה עיר (${student.city})`);
-  } else if (distance <= scoringConfig.nearbyCityDistanceKm) {
+  } else if (distance > 0 && distance <= scoringConfig.nearbyCityDistanceKm) {
     score += scoringConfig.nearbyCityPoints;
-    reasons.push(`עיר סמוכה (${distance.toFixed(0)} ק"מ)`);
+    reasons.push(`מרחק ${distance.toFixed(0)} ק"מ`);
+  } else if (distance > scoringConfig.nearbyCityDistanceKm) {
+    // Cities are far apart - add negative note
+    reasons.push(`ערים רחוקות (${distance.toFixed(0)} ק"מ)`);
   }
 
   // Gender match
@@ -104,9 +107,11 @@ function calculateMatchScore(
   // Cap at 100
   score = Math.min(score, 100);
 
+  // Build detailed reason string
+  const matchQuality = score >= 90 ? 'מצוינת' : score >= 80 ? 'טובה מאוד' : score >= 70 ? 'טובה' : 'סבירה';
   const reason = reasons.length > 0 
-    ? `התאמה ${score >= 90 ? 'מצוינת' : score >= 80 ? 'טובה מאוד' : score >= 70 ? 'טובה' : 'סבירה'}: ${reasons.join(', ')}`
-    : `ציון התאמה: ${score}`;
+    ? `התאמה ${matchQuality} (${score}%) - ${reasons.join(' • ')}`
+    : `ציון התאמה: ${score}%`;
 
   return { score, reason };
 }
@@ -219,23 +224,39 @@ serve(async (req) => {
       for (const user of availableUsers as User[]) {
         // Calculate distance
         let distance = 0;
+        let hasCoordinates = false;
+        
         if (
           student.latitude &&
           student.longitude &&
           user.latitude &&
           user.longitude
         ) {
+          hasCoordinates = true;
           distance = calculateDistance(
             student.latitude,
             student.longitude,
             user.latitude,
             user.longitude
           );
-        }
-
-        // Skip if distance exceeds configured limit
-        if (distance > nearbyCityDistanceKm && distance !== 0) {
-          continue;
+          
+          // Skip if distance exceeds configured limit
+          if (distance > nearbyCityDistanceKm) {
+            continue;
+          }
+        } else {
+          // No coordinates - compare cities by name (case-insensitive, trimmed)
+          const studentCity = (student.city || '').trim().toLowerCase();
+          const userCity = (user.city || '').trim().toLowerCase();
+          
+          if (studentCity === userCity && studentCity !== '' && studentCity !== 'לא צוין') {
+            // Same city by name
+            distance = 0;
+          } else {
+            // Different cities and no way to calculate distance - use high distance
+            distance = nearbyCityDistanceKm + 1;
+            // This will be filtered out by the scoring logic
+          }
         }
 
         const scoringConfig = {
