@@ -66,21 +66,25 @@ const MatchesTable = () => {
     setIsLoading(false);
   };
 
-  const updateMatchStatus = async (matchId: string, status: 'approved' | 'rejected') => {
-    const { error } = await supabase
-      .from('matches')
-      .update({ 
-        status,
-        approved_at: status === 'approved' ? new Date().toISOString() : null
-      })
-      .eq('id', matchId);
+  const updateMatchStatus = async (matchId: string, action: 'approve' | 'reject') => {
+    try {
+      const { data, error } = await supabase.functions.invoke('update-match-status', {
+        body: { matchId, action }
+      });
 
-    if (error) {
-      toast.error("שגיאה בעדכון ההתאמה");
-      console.error(error);
-    } else {
-      toast.success(status === 'approved' ? "ההתאמה אושרה בהצלחה" : "ההתאמה נדחתה");
+      if (error) throw error;
+
+      if (data?.error) {
+        toast.error(data.error);
+        console.error("Match update error:", data);
+        return;
+      }
+
+      toast.success(data?.message || (action === 'approve' ? "ההתאמה אושרה בהצלחה" : "ההתאמה נדחתה"));
       loadMatches();
+    } catch (error: any) {
+      console.error("Error updating match:", error);
+      toast.error("שגיאה בעדכון ההתאמה");
     }
   };
 
@@ -180,7 +184,7 @@ const MatchesTable = () => {
                         size="sm"
                         variant="default"
                         className="gap-1"
-                        onClick={() => updateMatchStatus(match.id, 'approved')}
+                        onClick={() => updateMatchStatus(match.id, 'approve')}
                       >
                         <Check className="h-4 w-4" />
                         אשר
@@ -189,7 +193,7 @@ const MatchesTable = () => {
                         size="sm"
                         variant="destructive"
                         className="gap-1"
-                        onClick={() => updateMatchStatus(match.id, 'rejected')}
+                        onClick={() => updateMatchStatus(match.id, 'reject')}
                       >
                         <X className="h-4 w-4" />
                         דחה
