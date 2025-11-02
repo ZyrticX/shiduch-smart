@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor_type: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          match_id: string | null
+          metadata: Json | null
+          notification_channel: string | null
+          recipient_email: string | null
+          recipient_phone: string | null
+          status: string | null
+        }
+        Insert: {
+          action: string
+          actor_type?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          match_id?: string | null
+          metadata?: Json | null
+          notification_channel?: string | null
+          recipient_email?: string | null
+          recipient_phone?: string | null
+          status?: string | null
+        }
+        Update: {
+          action?: string
+          actor_type?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          match_id?: string | null
+          metadata?: Json | null
+          notification_channel?: string | null
+          recipient_email?: string | null
+          recipient_phone?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_log_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       matches: {
         Row: {
           approved_at: string | null
