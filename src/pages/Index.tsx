@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, UserCheck, Clock, Sparkles, FileCheck } from "lucide-react";
+import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart } from "lucide-react";
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
@@ -98,6 +98,24 @@ const Index = () => {
             >
               <Sparkles className="h-5 w-5" />
               הפעל התאמה חכמה
+            </Button>
+            <Button 
+              onClick={() => navigate('/students')}
+              variant="outline"
+              size="lg"
+              className="gap-2"
+            >
+              <GraduationCap className="h-5 w-5" />
+              ניהול סטודנטים
+            </Button>
+            <Button 
+              onClick={() => navigate('/volunteers')}
+              variant="outline"
+              size="lg"
+              className="gap-2"
+            >
+              <Heart className="h-5 w-5" />
+              ניהול מתנדבים
             </Button>
             <Button 
               onClick={() => navigate('/audit-logs')}
