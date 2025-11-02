@@ -51,11 +51,23 @@ const Index = () => {
 
   const runMatchingAlgorithm = async () => {
     setIsMatching(true);
+    toast.info("מריץ אלגוריתם התאמה חכם...");
+    
     try {
-      // This will be implemented in the edge function
-      toast.info("מנגנון ההתאמה יוטמע בקרוב");
-      // TODO: Call edge function for matching algorithm
-    } catch (error) {
+      const { data, error } = await supabase.functions.invoke('generate-matches', {
+        body: { minScore: 60, limit: 100 }
+      });
+
+      if (error) throw error;
+
+      if (data?.suggestedCount > 0) {
+        toast.success(`✨ ${data.message}`);
+        loadStats();
+      } else {
+        toast.info(data?.message || "לא נמצאו התאמות חדשות");
+      }
+    } catch (error: any) {
+      console.error("Error running matching algorithm:", error);
       toast.error("שגיאה בהפעלת מנגנון ההתאמה");
     } finally {
       setIsMatching(false);
