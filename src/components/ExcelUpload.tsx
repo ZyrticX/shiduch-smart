@@ -12,6 +12,7 @@ interface SheetMapping {
   sheetName: string;
   targetTable: "students" | "volunteers";
   columnMapping: Record<string, string>;
+  enabled: boolean;
 }
 
 export function ExcelUpload() {
@@ -39,6 +40,7 @@ export function ExcelUpload() {
         sheetName,
         targetTable: "students" as const,
         columnMapping: {},
+        enabled: true,
       }));
       setMappings(initialMappings);
     };
@@ -52,6 +54,12 @@ export function ExcelUpload() {
     setMappings(newMappings);
   };
 
+  const toggleSheetEnabled = (sheetIndex: number) => {
+    const newMappings = [...mappings];
+    newMappings[sheetIndex].enabled = !newMappings[sheetIndex].enabled;
+    setMappings(newMappings);
+  };
+
   const handleUpload = async () => {
     if (!workbook || mappings.length === 0) {
       toast.error("אנא בחר קובץ תקין");
@@ -61,18 +69,20 @@ export function ExcelUpload() {
     setIsProcessing(true);
 
     try {
-      // Process each sheet
+      // Process only enabled sheets
       const allData: { table: string; rows: any[] }[] = [];
 
-      mappings.forEach((mapping) => {
-        const sheet = workbook.Sheets[mapping.sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet);
+      mappings
+        .filter((mapping) => mapping.enabled)
+        .forEach((mapping) => {
+          const sheet = workbook.Sheets[mapping.sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet);
 
-        allData.push({
-          table: mapping.targetTable,
-          rows: jsonData,
+          allData.push({
+            table: mapping.targetTable,
+            rows: jsonData,
+          });
         });
-      });
 
       // Send to edge function
       const { data, error } = await supabase.functions.invoke("import-excel", {
@@ -134,6 +144,12 @@ export function ExcelUpload() {
             <div className="text-sm font-medium">גיליונות שנמצאו ({sheets.length})</div>
             {mappings.map((mapping, index) => (
               <div key={mapping.sheetName} className="flex items-center gap-4 p-3 border rounded-lg">
+                <input
+                  type="checkbox"
+                  checked={mapping.enabled}
+                  onChange={() => toggleSheetEnabled(index)}
+                  className="h-4 w-4"
+                />
                 <div className="flex-1">
                   <div className="font-medium">{mapping.sheetName}</div>
                 </div>
@@ -143,6 +159,7 @@ export function ExcelUpload() {
                     onValueChange={(value) =>
                       updateSheetMapping(index, value as "students" | "volunteers")
                     }
+                    disabled={!mapping.enabled}
                   >
                     <SelectTrigger>
                       <SelectValue />

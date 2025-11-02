@@ -31,6 +31,11 @@ Deno.serve(async (req) => {
       const { table, rows } = tableData;
 
       console.log(`Processing ${rows.length} rows for table: ${table}`);
+      
+      // Log first row column names for debugging
+      if (rows.length > 0) {
+        console.log('Column names in Excel:', Object.keys(rows[0]));
+      }
 
       // Map Excel columns to database columns
       const mappedRows = rows.map((row: any) => {
@@ -74,6 +79,13 @@ Deno.serve(async (req) => {
       const validRows = mappedRows.filter(
         (row) => row.full_name && row.email && row.city && row.native_language
       );
+
+      console.log(`Valid rows: ${validRows.length} out of ${mappedRows.length}`);
+      
+      // Log invalid rows for debugging
+      if (validRows.length === 0 && mappedRows.length > 0) {
+        console.log('Sample invalid row:', JSON.stringify(mappedRows[0]));
+      }
 
       console.log(`Inserting ${validRows.length} valid rows into ${table}`);
 
