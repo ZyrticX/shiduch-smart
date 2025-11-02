@@ -3,12 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, UserCheck, Clock, Sparkles } from "lucide-react";
+import { Users, UserCheck, Clock, Sparkles, FileCheck } from "lucide-react";
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
+import { useNavigate } from "react-router-dom";
 
 const Index = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     waitingStudents: 0,
     activeVolunteers: 0,
@@ -118,12 +120,14 @@ const Index = () => {
             icon={<Clock className="h-5 w-5" />}
             variant="default"
           />
-          <StatsCard
-            title="התאמות מאושרות"
-            value={stats.approvedMatches}
-            icon={<UserCheck className="h-5 w-5" />}
-            variant="success"
-          />
+          <div onClick={() => navigate('/approved-matches')} className="cursor-pointer">
+            <StatsCard
+              title="התאמות מאושרות"
+              value={stats.approvedMatches}
+              icon={<UserCheck className="h-5 w-5" />}
+              variant="success"
+            />
+          </div>
         </div>
 
         {/* Matches Table */}
