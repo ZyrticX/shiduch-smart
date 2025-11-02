@@ -3,30 +3,51 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
 // Support both VITE_ and NEXT_PUBLIC_ prefixes for compatibility
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+// Also handle empty strings as undefined
+const getEnvVar = (viteKey: string, nextKey: string): string | undefined => {
+  const viteValue = import.meta.env[viteKey];
+  const nextValue = import.meta.env[nextKey];
+  const value = viteValue || nextValue;
+  return value && value.trim() !== '' ? value.trim() : undefined;
+};
+
+const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL');
+const SUPABASE_PUBLISHABLE_KEY = getEnvVar('VITE_SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY');
+
+// Debug logging (remove in production)
+console.log('Environment check:', {
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_URL: import.meta.env.NEXT_PUBLIC_SUPABASE_URL,
+  SUPABASE_URL: SUPABASE_URL,
+  hasPublishableKey: !!SUPABASE_PUBLISHABLE_KEY,
+  allEnvKeys: Object.keys(import.meta.env).filter(k => k.includes('SUPABASE') || k.includes('VITE')),
+});
 
 // Validate environment variables
 if (!SUPABASE_URL) {
-  throw new Error(
+  const errorMsg = 
     'Missing Supabase URL environment variable. ' +
-    'Please set VITE_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL in your .env file or Vercel environment variables.'
-  );
+    'Please set VITE_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_URL in your .env file or Vercel environment variables. ' +
+    `Current env vars: ${JSON.stringify(Object.keys(import.meta.env).filter(k => k.includes('SUPABASE') || k.includes('VITE')))}`;
+  console.error(errorMsg);
+  throw new Error(errorMsg);
 }
 
 if (!SUPABASE_PUBLISHABLE_KEY) {
-  throw new Error(
+  const errorMsg = 
     'Missing Supabase Publishable Key environment variable. ' +
-    'Please set VITE_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY in your .env file or Vercel environment variables.'
-  );
+    'Please set VITE_SUPABASE_PUBLISHABLE_KEY or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY in your .env file or Vercel environment variables.';
+  console.error(errorMsg);
+  throw new Error(errorMsg);
 }
 
 // Validate URL format
 if (!SUPABASE_URL.startsWith('http://') && !SUPABASE_URL.startsWith('https://')) {
-  throw new Error(
+  const errorMsg = 
     `Invalid Supabase URL: "${SUPABASE_URL}". ` +
-    'Must be a valid HTTP or HTTPS URL.'
-  );
+    'Must be a valid HTTP or HTTPS URL.';
+  console.error(errorMsg);
+  throw new Error(errorMsg);
 }
 
 // Import the supabase client like this:
