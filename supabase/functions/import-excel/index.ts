@@ -95,8 +95,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Phone handling
-        const phone = findColumn(['טלפון', 'phone', 'phone_number', 'tel', 'mobile']);
+        // Phone handling - support "טלפון נייד" as well
+        const phone = findColumn(['טלפון', 'טלפון נייד', 'phone', 'phone_number', 'tel', 'mobile']);
         if (phone) {
           mapped.phone = phone;
         }
@@ -135,8 +135,9 @@ Deno.serve(async (req) => {
             mapped.special_requests = specialRequests;
           }
         } else if (table === 'users') {
-          // Capacity - support multiple column names
+          // Capacity - support multiple column names including "כמות חיילים"
           const capacity = findColumn([
+            'כמות חיילים',
             'קיבולת מקסימלית', 
             'capacity_max', 
             'capacity', 
@@ -225,23 +226,50 @@ Deno.serve(async (req) => {
       console.log(`Upserting ${validRows.length} valid rows into ${table}`);
 
       if (validRows.length > 0) {
-        // Use upsert based on email (unique constraint)
-        const { data: upsertedData, error: upsertError } = await supabaseClient
-          .from(table)
-          .upsert(validRows, {
-            onConflict: 'email',
-            ignoreDuplicates: false
-          })
-          .select();
-
-        if (upsertError) {
-          console.error(`Error upserting into ${table}:`, upsertError);
-          errors.push(`[${sheetDisplayName}] שגיאה בעדכון ${table}: ${upsertError.message}`);
-          continue;
+        // Remove duplicates by email before upserting to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const uniqueRowsMap = new Map<string, any>();
+        for (const row of validRows) {
+          const email = row.email;
+          // Keep the last occurrence of each email (or first - doesn't matter, just need unique)
+          if (!uniqueRowsMap.has(email)) {
+            uniqueRowsMap.set(email, row);
+          } else {
+            console.log(`Duplicate email found: ${email}, keeping first occurrence`);
+          }
         }
+        const uniqueRows = Array.from(uniqueRowsMap.values());
+        
+        console.log(`After deduplication: ${uniqueRows.length} unique rows out of ${validRows.length} total rows`);
 
-        totalUpserted += upsertedData?.length || 0;
-        console.log(`Successfully upserted ${upsertedData?.length || 0} rows into ${table}`);
+        // Use upsert based on email (unique constraint)
+        // Process in smaller batches to avoid timeout issues
+        const batchSize = 100;
+        let totalUpsertedForTable = 0;
+        
+        for (let i = 0; i < uniqueRows.length; i += batchSize) {
+          const batch = uniqueRows.slice(i, i + batchSize);
+          console.log(`Processing batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(uniqueRows.length / batchSize)} (${batch.length} rows)`);
+          
+          const { data: upsertedData, error: upsertError } = await supabaseClient
+            .from(table)
+            .upsert(batch, {
+              onConflict: 'email',
+              ignoreDuplicates: false
+            })
+            .select();
+
+          if (upsertError) {
+            console.error(`Error upserting batch into ${table}:`, upsertError);
+            errors.push(`[${sheetDisplayName}] שגיאה בעדכון ${table} (batch ${Math.floor(i / batchSize) + 1}): ${upsertError.message}`);
+            continue;
+          }
+
+          totalUpsertedForTable += upsertedData?.length || 0;
+          console.log(`Successfully upserted ${upsertedData?.length || 0} rows in batch ${Math.floor(i / batchSize) + 1}`);
+        }
+        
+        totalUpserted += totalUpsertedForTable;
+        console.log(`Successfully upserted total ${totalUpsertedForTable} rows into ${table}`);
       }
     }
 
