@@ -47,23 +47,58 @@ const MatchesTable = () => {
 
   const loadMatches = async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('matches')
-      .select(`
-        *,
-        students!matches_student_id_fkey(full_name, city),
-        users!matches_user_id_fkey(full_name, city)
-      `)
-      .eq('status', 'Suggested')
-      .order('confidence_score', { ascending: false });
+    try {
+      // Load matches
+      const { data: matchesData, error: matchesError } = await supabase
+        .from('matches')
+        .select('*')
+        .eq('status', 'Suggested')
+        .order('confidence_score', { ascending: false });
 
-    if (error) {
+      if (matchesError) throw matchesError;
+
+      if (!matchesData || matchesData.length === 0) {
+        setMatches([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Get unique student and user IDs
+      const studentIds = [...new Set(matchesData.map(m => m.student_id).filter(Boolean))];
+      const userIds = [...new Set(matchesData.map(m => m.user_id).filter(Boolean))];
+
+      // Load students and users separately
+      const [studentsRes, usersRes] = await Promise.all([
+        studentIds.length > 0 
+          ? supabase.from('students').select('id, full_name, city').in('id', studentIds)
+          : Promise.resolve({ data: [], error: null }),
+        userIds.length > 0
+          ? supabase.from('users').select('id, full_name, city').in('id', userIds)
+          : Promise.resolve({ data: [], error: null })
+      ]);
+
+      if (studentsRes.error) throw studentsRes.error;
+      if (usersRes.error) throw usersRes.error;
+
+      // Create lookup maps
+      const studentsMap = new Map((studentsRes.data || []).map(s => [s.id, { full_name: s.full_name, city: s.city }]));
+      const usersMap = new Map((usersRes.data || []).map(u => [u.id, { full_name: u.full_name, city: u.city }]));
+
+      // Combine matches with student and user data
+      const enrichedMatches = matchesData.map(match => ({
+        ...match,
+        students: match.student_id ? studentsMap.get(match.student_id) || null : null,
+        users: match.user_id ? usersMap.get(match.user_id) || null : null,
+      }));
+
+      setMatches(enrichedMatches);
+    } catch (error: any) {
       toast.error("שגיאה בטעינת ההתאמות");
       console.error(error);
-    } else {
-      setMatches(data || []);
+      setMatches([]);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const updateMatchStatus = async (matchId: string, action: 'approve' | 'reject') => {
