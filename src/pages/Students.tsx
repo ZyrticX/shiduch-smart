@@ -232,7 +232,6 @@ export default function Students() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right whitespace-nowrap">שם מלא</TableHead>
-                  <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">אימייל</TableHead>
                   <TableHead className="text-right whitespace-nowrap hidden md:table-cell">טלפון</TableHead>
                   <TableHead className="text-right whitespace-nowrap">עיר</TableHead>
                   <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">שפת אם</TableHead>
@@ -244,13 +243,13 @@ export default function Students() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       טוען...
                     </TableCell>
                   </TableRow>
                 ) : filteredStudents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8">
+                    <TableCell colSpan={7} className="text-center py-8">
                       לא נמצאו סטודנטים
                     </TableCell>
                   </TableRow>
@@ -258,7 +257,6 @@ export default function Students() {
                   filteredStudents.map((student) => (
                     <TableRow key={student.id}>
                       <TableCell className="font-medium">{student.full_name}</TableCell>
-                      <TableCell className="hidden sm:table-cell">{student.email}</TableCell>
                       <TableCell className="hidden md:table-cell">{student.phone || "-"}</TableCell>
                       <TableCell>{student.city}</TableCell>
                       <TableCell className="hidden lg:table-cell">{student.native_language}</TableCell>
