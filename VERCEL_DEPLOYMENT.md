@@ -27,7 +27,7 @@
 5. לחץ על **"Environment Variables"** והוסף:
    ```
    VITE_SUPABASE_URL = https://lijxsieewetgiiisknnj.supabase.co
-   VITE_SUPABASE_PUBLISHABLE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpanhzaWVld2V0Z2lpaXNrbm5qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIwOTgyMzcsImV4cCI6MjA3NzY3NDIzN30.EnztpwEO4uUpi0TJxetQKcgxVWJ72dHJnl0AarR0MPY
+   VITE_SUPABASE_PUBLISHABLE_KEY = sb_publishable_5pp0ahxJ1v0RTEJ6utu8aA_o7KnHQRT
    ```
 6. לחץ על **"Deploy"**
 
