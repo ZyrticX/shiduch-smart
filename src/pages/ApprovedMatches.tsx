@@ -50,8 +50,8 @@ const ApprovedMatches = () => {
       .from('matches')
       .select(`
         *,
-        students(full_name, email, city),
-        users(full_name, email, city)
+        students!matches_student_id_fkey(full_name, email, city),
+        users!matches_user_id_fkey(full_name, email, city)
       `)
       .eq('status', 'approved')
       .order('approved_at', { ascending: false });

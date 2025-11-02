@@ -51,8 +51,8 @@ const MatchesTable = () => {
       .from('matches')
       .select(`
         *,
-        students(full_name, city),
-        users(full_name, city)
+        students!matches_student_id_fkey(full_name, city),
+        users!matches_user_id_fkey(full_name, city)
       `)
       .eq('status', 'Suggested')
       .order('confidence_score', { ascending: false });
