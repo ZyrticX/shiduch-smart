@@ -52,14 +52,18 @@ Deno.serve(async (req) => {
         const findColumn = (possibleNames: string[]): string | null => {
           for (const name of possibleNames) {
             // Try exact match first
-            if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
-              return String(row[name]).trim();
+            const value = row[name];
+            if (value !== undefined && value !== null && value !== '' && String(value).trim() !== '') {
+              return String(value).trim();
             }
             // Try case-insensitive match
             const rowKeys = Object.keys(row);
             const foundKey = rowKeys.find(key => key.toLowerCase() === name.toLowerCase());
-            if (foundKey && row[foundKey] !== undefined && row[foundKey] !== null && row[foundKey] !== '') {
-              return String(row[foundKey]).trim();
+            if (foundKey) {
+              const foundValue = row[foundKey];
+              if (foundValue !== undefined && foundValue !== null && foundValue !== '' && String(foundValue).trim() !== '') {
+                return String(foundValue).trim();
+              }
             }
           }
           return null;
@@ -107,8 +111,8 @@ Deno.serve(async (req) => {
           mapped.city = city;
         }
 
-        // Native language
-        const nativeLang = findColumn(['שפת אם', 'native_language', 'language', 'העדפת שפה', 'שפה']);
+        // Native language - support "שפות" and "העדפת שפה" as well
+        const nativeLang = findColumn(['שפת אם', 'שפות', 'native_language', 'language', 'העדפת שפה', 'שפה']);
         if (nativeLang) {
           mapped.native_language = nativeLang;
         }
@@ -176,36 +180,95 @@ Deno.serve(async (req) => {
       });
 
       // Filter out rows with missing required fields
-      // Email is required for upsert, but we can try to generate it from other fields if missing
+      // Generate email automatically if missing - it's required by DB but not by user
       const validRows = mappedRows.map((row: any) => {
         // Ensure all values are strings where needed
         if (row.full_name) row.full_name = String(row.full_name).trim();
-        if (row.email) row.email = String(row.email).trim();
         if (row.city) row.city = String(row.city).trim();
         if (row.native_language) row.native_language = String(row.native_language).trim();
         
-        // If email is missing but we have phone, generate email from phone
-        if (!row.email && row.phone) {
-          const phoneClean = String(row.phone).replace(/\D/g, '');
-          if (phoneClean.length > 0) {
-            row.email = `temp_${phoneClean}@imported.local`;
+        // ALWAYS generate unique email if missing - use contact ID, phone, or name-based
+        if (!row.email || row.email.trim() === '') {
+          // Strategy 1: Try phone if available
+          if (row.phone) {
+            const phoneClean = String(row.phone).replace(/\D/g, '');
+            if (phoneClean.length > 0) {
+              row.email = `imported_${phoneClean}@shiduch.local`;
+            }
           }
-        }
-        
-        // If email is still missing, try to generate from name
-        if (!row.email && row.full_name) {
-          const nameForEmail = row.full_name.replace(/\s+/g, '.').replace(/[^a-zA-Z0-9.]/g, '').toLowerCase();
-          if (nameForEmail.length > 0) {
-            row.email = `${nameForEmail}@imported.local`;
+          
+          // Strategy 2: Generate from name + timestamp if no phone
+          if (!row.email || row.email.trim() === '') {
+            const nameForEmail = row.full_name 
+              ? row.full_name.replace(/\s+/g, '.').replace(/[^a-zA-Z0-9.]/g, '').toLowerCase().substring(0, 20)
+              : 'user';
+            const timestamp = Date.now();
+            const random = Math.floor(Math.random() * 10000);
+            row.email = `${nameForEmail}_${timestamp}_${random}@shiduch.local`;
           }
+          
+          // Strategy 3: If still no email (shouldn't happen), use UUID-based
+          if (!row.email || row.email.trim() === '') {
+            const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
+            row.email = `imported_${uuid.replace(/-/g, '')}@shiduch.local`;
+          }
+        } else {
+          row.email = String(row.email).trim();
         }
         
         return row;
-      }).filter(
-        (row) => row.full_name && row.email && row.city && row.native_language
-      );
+      }).filter((row) => {
+        // Only require: full_name, city, native_language (email is ALWAYS auto-generated)
+        const isValid = row.full_name && row.city && row.native_language && row.email;
+        if (!isValid) {
+          console.log('Row filtered out - missing required fields:', {
+            hasName: !!row.full_name,
+            hasCity: !!row.city,
+            hasLanguage: !!row.native_language,
+            hasEmail: !!row.email,
+            row: JSON.stringify(row, null, 2)
+          });
+        }
+        return isValid;
+      });
 
       console.log(`Valid rows: ${validRows.length} out of ${mappedRows.length}`);
+      
+      // Log detailed statistics about why rows were filtered
+      if (validRows.length < mappedRows.length) {
+        const filteredCount = mappedRows.length - validRows.length;
+        console.log(`⚠️  ${filteredCount} rows were filtered out. Reasons:`);
+        
+        const missingFields = {
+          name: 0,
+          city: 0,
+          language: 0,
+          email: 0
+        };
+        
+        mappedRows.forEach((row: any) => {
+          if (!row.full_name) missingFields.name++;
+          if (!row.city) missingFields.city++;
+          if (!row.native_language) missingFields.language++;
+          if (!row.email && !row.phone) missingFields.email++;
+        });
+        
+        console.log(`Missing fields breakdown:`, missingFields);
+        
+        // Show first few invalid rows for debugging
+        const invalidRows = mappedRows.filter((row: any) => {
+          return !row.full_name || !row.city || !row.native_language;
+        }).slice(0, 3);
+        
+        if (invalidRows.length > 0) {
+          console.log(`Sample invalid rows (first 3):`, invalidRows.map((r: any) => ({
+            name: r.full_name || 'MISSING',
+            city: r.city || 'MISSING',
+            language: r.native_language || 'MISSING',
+            phone: r.phone || 'none'
+          })));
+        }
+      }
       
       if (validRows.length === 0 && mappedRows.length > 0) {
         console.log('Sample invalid row:', JSON.stringify(mappedRows[0], null, 2));
