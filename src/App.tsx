@@ -8,6 +8,7 @@ import ApprovedMatches from "./pages/ApprovedMatches";
 import AuditLogs from "./pages/AuditLogs";
 import Students from "./pages/Students";
 import Volunteers from "./pages/Volunteers";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/students" element={<Students />} />
           <Route path="/volunteers" element={<Volunteers />} />
+          <Route path="/analytics" element={<Analytics />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

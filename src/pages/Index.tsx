@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart } from "lucide-react";
+import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
@@ -89,7 +89,7 @@ const Index = () => {
               ניהול שיבוצים אוטומטי בין סטודנטים למתנדבים
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button 
               onClick={runMatchingAlgorithm}
               disabled={isMatching}
@@ -98,6 +98,15 @@ const Index = () => {
             >
               <Sparkles className="h-5 w-5" />
               הפעל התאמה חכמה
+            </Button>
+            <Button 
+              onClick={() => navigate('/analytics')}
+              variant="outline"
+              size="lg"
+              className="gap-2"
+            >
+              <BarChart3 className="h-5 w-5" />
+              דוחות וניתוח
             </Button>
             <Button 
               onClick={() => navigate('/students')}
