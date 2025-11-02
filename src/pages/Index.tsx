@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart, BarChart3 } from "lucide-react";
+import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart, BarChart3, Settings } from "lucide-react";
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
@@ -140,6 +140,16 @@ const Index = () => {
               <FileCheck className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="hidden lg:inline">לוג התראות</span>
               <span className="lg:hidden">לוגים</span>
+            </Button>
+            <Button 
+              onClick={() => navigate('/settings')}
+              variant="outline"
+              size="lg"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
+            >
+              <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden lg:inline">הגדרות</span>
+              <span className="lg:hidden">הגדרות</span>
             </Button>
           </div>
         </div>

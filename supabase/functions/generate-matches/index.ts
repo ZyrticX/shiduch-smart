@@ -56,38 +56,46 @@ function calculateDistance(
 function calculateMatchScore(
   student: Student,
   user: User,
-  distance: number
+  distance: number,
+  scoringConfig: {
+    languageMatchPoints: number;
+    sameCityPoints: number;
+    nearbyCityPoints: number;
+    nearbyCityDistanceKm: number;
+    genderMatchPoints: number;
+    specialRequestsPoints: number;
+  }
 ): { score: number; reason: string } {
   let score = 0;
   const reasons: string[] = [];
 
-  // Language match (60 points)
+  // Language match
   if (student.native_language === user.native_language) {
-    score += 60;
+    score += scoringConfig.languageMatchPoints;
     reasons.push(`שפת אם זהה (${student.native_language})`);
   }
 
-  // City/Distance match (40 points for same city, 20 for nearby <150km)
+  // City/Distance match
   if (distance === 0) {
-    score += 40;
+    score += scoringConfig.sameCityPoints;
     reasons.push(`אותה עיר (${student.city})`);
-  } else if (distance <= 150) {
-    score += 20;
+  } else if (distance <= scoringConfig.nearbyCityDistanceKm) {
+    score += scoringConfig.nearbyCityPoints;
     reasons.push(`עיר סמוכה (${distance.toFixed(0)} ק"מ)`);
   }
 
-  // Gender match (15 points)
+  // Gender match
   if (student.gender && user.gender && student.gender === user.gender) {
-    score += 15;
+    score += scoringConfig.genderMatchPoints;
     reasons.push("התאמת מין");
   }
 
-  // Special requests match (5 points)
+  // Special requests match
   if (student.special_requests && user.native_language) {
     const requestLower = student.special_requests.toLowerCase();
     const userLangLower = user.native_language.toLowerCase();
     if (requestLower.includes(userLangLower) || requestLower.includes("דובר")) {
-      score += 5;
+      score += scoringConfig.specialRequestsPoints;
       reasons.push("התאמה לבקשות מיוחדות");
     }
   }
@@ -114,9 +122,39 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { minScore = 60, limit = 100 } = await req.json().catch(() => ({}));
+    // Load settings from database
+    const { data: settingsData, error: settingsError } = await supabaseClient
+      .from("settings")
+      .select("key, value");
+
+    if (settingsError) {
+      console.error("Error loading settings:", settingsError);
+    }
+
+    // Convert settings array to object for easy access
+    const settings: Record<string, string> = {};
+    if (settingsData) {
+      settingsData.forEach((s) => {
+        settings[s.key] = s.value;
+      });
+    }
+
+    // Get configurable parameters with defaults
+    const nearbyCityDistanceKm = parseInt(settings.nearby_city_distance_km || "150", 10);
+    const minScore = parseInt(settings.min_match_score || "60", 10);
+    const limit = parseInt(settings.max_matches_limit || "100", 10);
+    const languageMatchPoints = parseInt(settings.language_match_points || "60", 10);
+    const sameCityPoints = parseInt(settings.same_city_points || "40", 10);
+    const nearbyCityPoints = parseInt(settings.nearby_city_points || "20", 10);
+    const genderMatchPoints = parseInt(settings.gender_match_points || "15", 10);
+    const specialRequestsPoints = parseInt(settings.special_requests_points || "5", 10);
+
+    const { minScore: reqMinScore, limit: reqLimit } = await req.json().catch(() => ({}));
+    const finalMinScore = reqMinScore || minScore;
+    const finalLimit = reqLimit || limit;
 
     console.log("Starting match generation...");
+    console.log(`Using settings: nearbyCityDistanceKm=${nearbyCityDistanceKm}, minScore=${finalMinScore}, limit=${finalLimit}`);
 
     // Load unmatched students
     const { data: students, error: studentsError } = await supabaseClient
@@ -194,15 +232,24 @@ serve(async (req) => {
           );
         }
 
-        // Skip if distance > 150km
-        if (distance > 150 && distance !== 0) {
+        // Skip if distance exceeds configured limit
+        if (distance > nearbyCityDistanceKm && distance !== 0) {
           continue;
         }
 
-        const { score, reason } = calculateMatchScore(student, user, distance);
+        const scoringConfig = {
+          languageMatchPoints,
+          sameCityPoints,
+          nearbyCityPoints,
+          nearbyCityDistanceKm,
+          genderMatchPoints,
+          specialRequestsPoints,
+        };
+
+        const { score, reason } = calculateMatchScore(student, user, distance, scoringConfig);
 
         // Skip if below minimum score
-        if (score < minScore) {
+        if (score < finalMinScore) {
           continue;
         }
 
@@ -255,7 +302,7 @@ serve(async (req) => {
         userCapacity.set(match.user_id, capacity - 1);
 
         // Stop if we reached the limit
-        if (matches.length >= limit) {
+        if (matches.length >= finalLimit) {
           break;
         }
       }

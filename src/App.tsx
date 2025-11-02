@@ -10,6 +10,7 @@ import AuditLogs from "./pages/AuditLogs";
 import Students from "./pages/Students";
 import Users from "./pages/Volunteers";
 import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import Login from "./components/Login";
 import Footer from "./components/Footer";
@@ -107,6 +108,7 @@ const App = () => {
                 <Route path="/students" element={<Students />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/analytics" element={<Analytics />} />
+                <Route path="/settings" element={<Settings />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

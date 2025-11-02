@@ -42,14 +42,16 @@ shiduch-smart/
 │   │   ├── ExcelUpload.tsx # העלאת קבצי Excel
 │   │   ├── MatchesTable.tsx # טבלת התאמות
 │   │   ├── StatsCard.tsx   # כרטיס סטטיסטיקה
-│   │   └── Login.tsx       # מסך התחברות
+│   │   ├── Login.tsx       # מסך התחברות
+│   │   └── Footer.tsx      # תחתית דף
 │   ├── pages/              # דפי האפליקציה
 │   │   ├── Index.tsx       # דף ראשי
 │   │   ├── Students.tsx    # ניהול סטודנטים
 │   │   ├── Volunteers.tsx # ניהול מתנדבים
 │   │   ├── ApprovedMatches.tsx # התאמות מאושרות
 │   │   ├── Analytics.tsx   # דוחות וניתוח
-│   │   └── AuditLogs.tsx  # לוג התראות
+│   │   ├── AuditLogs.tsx  # לוג התראות
+│   │   └── Settings.tsx   # הגדרות מערכת
 │   ├── integrations/
 │   │   └── supabase/       # הגדרות Supabase
 │   │       ├── client.ts   # Supabase client
@@ -149,6 +151,31 @@ shiduch-smart/
 - `idx_audit_log_created_at` על `created_at DESC`
 - `idx_audit_log_status` על `status`
 
+#### טבלה: `settings`
+```sql
+- id: UUID (Primary Key)
+- key: TEXT (NOT NULL, UNIQUE)
+- value: TEXT (NOT NULL)
+- description: TEXT
+- category: TEXT (DEFAULT 'matching')
+- updated_at: TIMESTAMPTZ (DEFAULT now())
+- created_at: TIMESTAMPTZ (DEFAULT now())
+```
+
+**Indexes:**
+- `idx_settings_key` על `key`
+- `idx_settings_category` על `category`
+
+**ברירות מחדל:**
+- `nearby_city_distance_km`: "150"
+- `min_match_score`: "60"
+- `max_matches_limit`: "100"
+- `language_match_points`: "60"
+- `same_city_points`: "40"
+- `nearby_city_points`: "20"
+- `gender_match_points`: "15"
+- `special_requests_points`: "5"
+
 ### Database Functions & Triggers
 
 #### Function: `update_volunteer_capacity()`
@@ -177,26 +204,45 @@ shiduch-smart/
 **Input:**
 ```typescript
 {
-  minScore?: number;  // ציון מינימלי (default: 60)
-  limit?: number;     // מקסימום התאמות (default: 100)
+  minScore?: number;  // ציון מינימלי (override - אם לא מוגדר, משתמש מ-settings)
+  limit?: number;     // מקסימום התאמות (override - אם לא מוגדר, משתמש מ-settings)
 }
 ```
 
+**Settings Loading:**
+הפונקציה טוענת את כל ההגדרות מטבלת `settings` ומשתמשת בהן. אם הגדרה לא קיימת, משתמשת בברירת מחדל:
+
+```typescript
+const settings = {
+  nearby_city_distance_km: 150,
+  min_match_score: 60,
+  max_matches_limit: 100,
+  language_match_points: 60,
+  same_city_points: 40,
+  nearby_city_points: 20,
+  gender_match_points: 15,
+  special_requests_points: 5
+};
+```
+
 **אלגוריתם ההתאמה:**
-1. טוען סטודנטים שלא משובצים (`is_matched = false`)
-2. טוען מתנדבים פעילים עם קיבולת פנויה (`is_active = true` ו-`current_matches < capacity`)
-3. מחשב התאמות לכל זוג (student, volunteer):
-   - **שפת אם זהה**: 60 נקודות
-   - **אותה עיר**: 40 נקודות
-   - **עיר סמוכה (<150 ק"מ)**: 20 נקודות
-   - **התאמת מין**: 15 נקודות
-   - **בקשות מיוחדות**: 5 נקודות
-4. מסנן התאמות מתחת לציון מינימלי או מעל 150 ק"מ
-5. ממיין לפי ציון (גבוה לנמוך)
-6. מבצע הקצאה חמדנית (Greedy):
+1. טוען הגדרות מטבלת `settings` (עם fallback לברירות מחדל)
+2. טוען סטודנטים שלא משובצים (`is_matched = false`)
+3. טוען מתנדבים פעילים עם קיבולת פנויה (`is_active = true` ו-`current_students < capacity_max`)
+4. מחשב התאמות לכל זוג (student, volunteer):
+   - **שפת אם זהה**: נקודות לפי `language_match_points` (ברירת מחדל: 60)
+   - **אותה עיר**: נקודות לפי `same_city_points` (ברירת מחדל: 40)
+   - **עיר סמוכה**: נקודות לפי `nearby_city_points` (ברירת מחדל: 20)
+     - מרחק מקסימלי לפי `nearby_city_distance_km` (ברירת מחדל: 150 ק"מ)
+   - **התאמת מין**: נקודות לפי `gender_match_points` (ברירת מחדל: 15)
+   - **בקשות מיוחדות**: נקודות לפי `special_requests_points` (ברירת מחדל: 5)
+5. מסנן התאמות מתחת לציון מינימלי (`min_match_score`) או מעל מרחק מקסימלי
+6. ממיין לפי ציון (גבוה לנמוך)
+7. מבצע הקצאה חמדנית (Greedy):
    - כל סטודנט מקבל רק התאמה אחת
    - כל מתנדב לא יעבור את הקיבולת שלו
    - בודק התאמות קיימות כדי למנוע כפילויות
+8. מגביל את מספר ההתאמות לפי `max_matches_limit` (ברירת מחדל: 100)
 
 **חישוב מרחק:**
 משתמש בנוסחת Haversine לחישוב מרחק בין שתי נקודות גאוגרפיות:
@@ -317,6 +363,7 @@ const channel = supabase
 - `ApprovedMatches` - צפייה בייצוא התאמות מאושרות (responsive + RTL)
 - `Analytics` - דוחות וניתוח (responsive + RTL)
 - `AuditLogs` - לוג התראות (responsive + RTL)
+- `Settings` - הגדרות מערכת (responsive + RTL) - ניהול פרמטרי האלגוריתם
 - `NotFound` - דף 404 (responsive + RTL)
 
 **Components** - רכיבים לשימוש חוזר:
@@ -337,6 +384,7 @@ const channel = supabase
 /approved-matches → ApprovedMatches (מוגן בסיסמה)
 /analytics → Analytics (מוגן בסיסמה)
 /audit-logs → AuditLogs (מוגן בסיסמה)
+/settings → Settings (מוגן בסיסמה) - הגדרות מערכת
 * → NotFound (404)
 ```
 
@@ -531,6 +579,39 @@ npm run test:e2e     # (להגדיר)
 - כפתורים עם גודל מותאם (`text-xs sm:text-sm`)
 - Drawers במקום Dialogs למובייל
 
+## Settings Management
+
+### Settings Page (`/settings`)
+
+**מטרה**: ניהול פרמטרי האלגוריתם בצורה דינמית
+
+**תכונות:**
+- טעינת הגדרות מטבלת `settings`
+- עריכה של כל הפרמטרים
+- שמירה מיידית למסד הנתונים
+- איפוס לברירות מחדל
+- ממשק responsive עם RTL
+
+**פרמטרים ניתנים לעריכה:**
+
+**קטגוריה: `matching`**
+- `nearby_city_distance_km` - מרחק מקסימלי לעיר קרובה (קילומטרים)
+- `min_match_score` - ציון מינימלי להתאמה (0-100)
+- `max_matches_limit` - מקסימום התאמות ליצירה בפעם אחת
+
+**קטגוריה: `scoring`**
+- `language_match_points` - נקודות לשפת אם זהה (0-100)
+- `same_city_points` - נקודות לאותה עיר (0-100)
+- `nearby_city_points` - נקודות לעיר סמוכה (0-100)
+- `gender_match_points` - נקודות להתאמת מין (0-100)
+- `special_requests_points` - נקודות לבקשות מיוחדות (0-100)
+
+**Implementation:**
+- קומפוננטת `Settings.tsx` עם טופס עריכה
+- עדכון ישיר בטבלת `settings` דרך Supabase Client
+- האלגוריתם קורא את ההגדרות בכל הרצה
+- Fallback לברירות מחדל אם הגדרה לא קיימת
+
 ## Future Enhancements
 
 ### אפשרויות להרחבה:
@@ -548,6 +629,8 @@ npm run test:e2e     # (להגדיר)
 12. **Offline Mode** - עבודה במצב offline
 13. **Multi-language** - תמיכה בשפות נוספות
 14. **Dark Mode** - מצב כהה מלא
+15. **Settings History** - היסטוריית שינויים בהגדרות
+16. **Settings Validation** - בדיקת תקינות הערכים לפני שמירה
 
 ## Dependencies
 
@@ -630,5 +713,5 @@ npm run build
 **Maintained by**: [ZyrticX](https://github.com/ZyrticX)  
 **Repository**: [https://github.com/ZyrticX/shiduch-smart](https://github.com/ZyrticX/shiduch-smart)  
 **Last Updated**: 2025  
-**Version**: 1.0.0
+**Version**: 1.1.0
 

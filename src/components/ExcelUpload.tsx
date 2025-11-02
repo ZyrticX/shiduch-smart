@@ -76,7 +76,20 @@ export function ExcelUpload() {
         .filter((mapping) => mapping.enabled)
         .forEach((mapping) => {
           const sheet = workbook.Sheets[mapping.sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(sheet);
+          // Convert sheet to JSON - XLSX will automatically use first row as headers
+          const jsonData = XLSX.utils.sheet_to_json(sheet, {
+            defval: null,
+            raw: false
+          });
+
+          if (jsonData.length > 0) {
+            console.log(`Sheet "${mapping.sheetName}":`);
+            console.log(`- Found ${jsonData.length} rows`);
+            console.log(`- Columns:`, Object.keys(jsonData[0]));
+            console.log(`- Sample row:`, jsonData[0]);
+          } else {
+            console.warn(`Sheet "${mapping.sheetName}" is empty`);
+          }
 
           allData.push({
             table: mapping.targetTable,
@@ -89,18 +102,44 @@ export function ExcelUpload() {
         body: { data: allData },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Upload error:", error);
+        throw error;
+      }
 
-      toast.success(`הנתונים הועלו בהצלחה: ${data.inserted} רשומות נוספו`);
+      if (data?.error) {
+        console.error("Server error:", data.error);
+        throw new Error(data.error);
+      }
+
+      if (data?.errors && data.errors.length > 0) {
+        console.error("Import errors:", data.errors);
+        toast.error(`הועלו ${data.inserted || 0} רשומות, אבל היו שגיאות: ${data.errors.join('; ')}`);
+      } else {
+        toast.success(`הנתונים הועלו בהצלחה: ${data.inserted || 0} רשומות נוספו`);
+      }
       
       // Reset
       setFile(null);
       setSheets([]);
       setWorkbook(null);
       setMappings([]);
-    } catch (error) {
+      
+      // Reload page to show new data (only if successful)
+      if (data?.success !== false) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch (error: any) {
       console.error("Error uploading:", error);
-      toast.error("שגיאה בהעלאת הנתונים");
+      const errorMessage = error?.message || error?.error || "שגיאה לא ידועה";
+      toast.error(`שגיאה בהעלאת הנתונים: ${errorMessage}`);
+      
+      // Show detailed error in console for debugging
+      if (error?.response) {
+        console.error("Error response:", error.response);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -142,6 +181,21 @@ export function ExcelUpload() {
         {sheets.length > 0 && (
           <div className="space-y-4">
             <div className="text-sm font-medium">גיליונות שנמצאו ({sheets.length})</div>
+            <div className="text-xs text-muted-foreground bg-muted p-3 rounded-lg">
+              <p className="font-medium mb-2">הוראות:</p>
+              <ul className="list-disc list-inside space-y-1 mr-4">
+                <li>בחר את הגיליונות שברצונך להעלות (סמן את התיבות)</li>
+                <li>בחר לכל גיליון אם הוא מיועד ל<strong>תלמידים</strong> או <strong>משתמשים</strong> (מתנדבים)</li>
+                <li>ודא שהגיליון מכיל את העמודות הבאות:
+                  <ul className="list-disc list-inside mr-4 mt-1">
+                    <li>שם פרטי / שם משפחה (או שם מלא)</li>
+                    <li>מזהה איש קשר / אימייל</li>
+                    <li>עיר</li>
+                    <li>שפת אם</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
             {mappings.map((mapping, index) => (
               <div key={mapping.sheetName} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-3 border rounded-lg">
                 <div className="flex items-center gap-2 w-full sm:w-auto">
