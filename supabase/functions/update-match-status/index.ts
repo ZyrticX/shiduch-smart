@@ -146,6 +146,17 @@ serve(async (req) => {
       // - Mark student.is_matched = true
 
       console.log(`Match ${matchId} approved successfully`);
+
+      // Send notifications asynchronously
+      try {
+        await supabaseClient.functions.invoke('notify-match', {
+          body: { matchId }
+        });
+        console.log(`Notifications triggered for match ${matchId}`);
+      } catch (notifyError) {
+        // Log but don't fail the approval
+        console.error("Error triggering notifications:", notifyError);
+      }
       
       return new Response(
         JSON.stringify({ 

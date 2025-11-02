@@ -89,15 +89,26 @@ const Index = () => {
               ניהול שיבוצים אוטומטי בין סטודנטים למתנדבים
             </p>
           </div>
-          <Button 
-            onClick={runMatchingAlgorithm}
-            disabled={isMatching}
-            size="lg"
-            className="gap-2"
-          >
-            <Sparkles className="h-5 w-5" />
-            הפעל התאמה חכמה
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={runMatchingAlgorithm}
+              disabled={isMatching}
+              size="lg"
+              className="gap-2"
+            >
+              <Sparkles className="h-5 w-5" />
+              הפעל התאמה חכמה
+            </Button>
+            <Button 
+              onClick={() => navigate('/audit-logs')}
+              variant="outline"
+              size="lg"
+              className="gap-2"
+            >
+              <FileCheck className="h-5 w-5" />
+              לוג התראות
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
