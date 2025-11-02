@@ -112,12 +112,12 @@ const MatchesTable = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-row-reverse justify-end">
         <Input
           placeholder="חיפוש לפי שם, עיר..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="max-w-sm"
+          className="max-w-sm text-right"
         />
         <Button variant="outline" className="gap-2">
           <FileDown className="h-4 w-4" />

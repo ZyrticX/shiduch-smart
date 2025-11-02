@@ -28,7 +28,7 @@ const StatsCard = ({ title, value, icon, variant = "default" }: StatsCardProps) 
     <Card className={cn("transition-all hover:shadow-md", variantStyles[variant])}>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
+          <div className="space-y-1 text-right">
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
             <p className="text-3xl font-bold text-foreground">{value}</p>
           </div>

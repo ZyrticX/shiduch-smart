@@ -67,7 +67,7 @@ const Index = () => {
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
+          <div className="text-right">
             <h1 className="text-4xl font-bold text-foreground mb-2">
               מערכת שיבוץ חכמה
             </h1>
@@ -116,7 +116,7 @@ const Index = () => {
 
         {/* Matches Table */}
         <Card>
-          <CardHeader>
+          <CardHeader className="text-right">
             <CardTitle>התאמות מוצעות</CardTitle>
             <CardDescription>
               התאמות חכמות על בסיס שפה, עיר, מין ומרחק גאוגרפי
