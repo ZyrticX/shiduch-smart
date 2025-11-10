@@ -39,9 +39,10 @@ Deno.serve(async (req) => {
 
       console.log(`Processing ${rows.length} rows for table: ${table} (sheet: ${sheetDisplayName})`);
       
-      // Log first row column names for debugging
+      // Log first row column names and values for debugging
       if (rows.length > 0) {
         console.log('Column names in Excel:', Object.keys(rows[0]));
+        console.log('First row sample data:', JSON.stringify(rows[0], null, 2));
       }
 
       // Map Excel columns to database columns
@@ -70,15 +71,49 @@ Deno.serve(async (req) => {
         };
 
         // Name handling - support both "שם מלא" and "שם פרטי" + "שם משפחה"
-        const fullName = findColumn(['שם מלא', 'full_name', 'name', 'שם']);
+        // Try multiple variations including common Excel column names
+        const fullName = findColumn([
+          'שם מלא', 
+          'full_name', 
+          'name', 
+          'שם',
+          'שם מלא',
+          'שם מלא:',
+          'שם מלא ',
+          'שם מלא: ',
+          'שם מלא:שם מלא',
+          'שם מלא:שם פרטי',
+          'שם מלא:שם משפחה'
+        ]);
         if (fullName) {
           mapped.full_name = fullName;
         } else {
-          const firstName = findColumn(['שם פרטי', 'first_name', 'firstName', 'שם פרטי']);
-          const lastName = findColumn(['שם משפחה', 'last_name', 'lastName', 'שם משפחה']);
+          const firstName = findColumn([
+            'שם פרטי', 
+            'first_name', 
+            'firstName', 
+            'שם פרטי',
+            'שם פרטי:',
+            'שם פרטי ',
+            'שם פרטי:שם פרטי'
+          ]);
+          const lastName = findColumn([
+            'שם משפחה', 
+            'last_name', 
+            'lastName', 
+            'שם משפחה',
+            'שם משפחה:',
+            'שם משפחה ',
+            'שם משפחה:שם משפחה'
+          ]);
           if (firstName || lastName) {
             mapped.full_name = `${firstName || ''} ${lastName || ''}`.trim();
           }
+        }
+        
+        // Log if name is missing for debugging
+        if (!mapped.full_name && rowIndex === 0) {
+          console.log('⚠️ WARNING: No name found in first row. Available columns:', Object.keys(row));
         }
 
         // Email/Contact ID handling - prioritize email, then contact ID
@@ -102,9 +137,27 @@ Deno.serve(async (req) => {
         }
 
         // Phone handling - support "טלפון נייד" as well
-        const phone = findColumn(['טלפון', 'טלפון נייד', 'phone', 'phone_number', 'tel', 'mobile']);
+        const phone = findColumn([
+          'טלפון', 
+          'טלפון נייד', 
+          'phone', 
+          'phone_number', 
+          'tel', 
+          'mobile',
+          'טלפון:',
+          'טלפון נייד:',
+          'טלפון:טלפון נייד',
+          'טלפון נייד:טלפון נייד',
+          'טלפון נייד:טלפון',
+          'טלפון:טלפון'
+        ]);
         if (phone) {
           mapped.phone = phone;
+        }
+        
+        // Log if phone is missing for debugging
+        if (!mapped.phone && rowIndex === 0) {
+          console.log('⚠️ WARNING: No phone found in first row. Available columns:', Object.keys(row));
         }
 
         // City
@@ -178,6 +231,11 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Log mapping result for first row to debug
+        if (rowIndex === 0) {
+          console.log('Mapped row 0:', JSON.stringify(mapped, null, 2));
+        }
+        
         return mapped;
       });
 
