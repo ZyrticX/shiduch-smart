@@ -137,8 +137,12 @@ Deno.serve(async (req) => {
           ]);
         }
         if (phone) {
-          // Clean phone number - remove spaces, dashes, etc.
-          mapped.phone = String(phone).replace(/\s+/g, '').replace(/-/g, '');
+          // Clean phone number - remove spaces, dashes, etc. and normalize
+          const cleanedPhone = String(phone).replace(/\s+/g, '').replace(/-/g, '').trim();
+          // Only set if not empty after cleaning
+          if (cleanedPhone && cleanedPhone !== 'X' && cleanedPhone.toUpperCase() !== 'X') {
+            mapped.phone = cleanedPhone;
+          }
         }
         
         // Log if phone is missing for debugging
@@ -543,75 +547,53 @@ Deno.serve(async (req) => {
         console.log(`After file deduplication: ${uniqueRowsInFile.length} unique rows out of ${validRows.length} total rows`);
 
         // Step 2: Check against existing records in database
-        // Get all phones and contact_ids from unique rows
-        const phonesToCheck = uniqueRowsInFile.map(r => r.phone).filter(Boolean);
-        const contactIdsToCheck = uniqueRowsInFile.map(r => r.contact_id).filter(Boolean);
+        // Get all phones and contact_ids from unique rows (normalize phone numbers)
+        const phonesToCheck = uniqueRowsInFile
+          .map(r => r.phone ? String(r.phone).replace(/\s+/g, '').replace(/-/g, '').trim() : null)
+          .filter(Boolean);
+        const contactIdsToCheck = uniqueRowsInFile
+          .map(r => r.contact_id ? String(r.contact_id).trim() : null)
+          .filter(Boolean);
         
         // Also check by name+city for rows without phone/contact_id
         const nameCityPairs = uniqueRowsInFile
           .filter(r => !r.phone && !r.contact_id)
           .map(r => ({ name: r.full_name, city: r.city }));
         
-        // Load existing records from database
+        // Load ALL existing records from database to check against (single query is more reliable)
         let existingRecords = new Set<string>();
         let existingNameCity = new Set<string>();
         
-        if (phonesToCheck.length > 0) {
-          const { data: existingByPhone, error: phoneError } = await supabaseClient
-            .from(table)
-            .select('phone, contact_id, full_name, city')
-            .in('phone', phonesToCheck);
-          
-          if (!phoneError && existingByPhone) {
-            existingByPhone.forEach((r: any) => {
-              if (r.phone) existingRecords.add(`phone:${r.phone}`);
-              if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
-              if (r.full_name && r.city) {
-                existingNameCity.add(`${r.full_name.trim().toLowerCase()}_${r.city.trim().toLowerCase()}`);
-              }
-            });
-          }
-        }
+        const { data: allExisting, error: allExistingError } = await supabaseClient
+          .from(table)
+          .select('phone, contact_id, full_name, city');
         
-        if (contactIdsToCheck.length > 0) {
-          const { data: existingByContactId, error: contactError } = await supabaseClient
-            .from(table)
-            .select('phone, contact_id, full_name, city')
-            .in('contact_id', contactIdsToCheck);
-          
-          if (!contactError && existingByContactId) {
-            existingByContactId.forEach((r: any) => {
-              if (r.phone) existingRecords.add(`phone:${r.phone}`);
-              if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
-              if (r.full_name && r.city) {
-                existingNameCity.add(`${r.full_name.trim().toLowerCase()}_${r.city.trim().toLowerCase()}`);
+        if (!allExistingError && allExisting) {
+          console.log(`Loading ${allExisting.length} existing records from database for duplicate check`);
+          allExisting.forEach((r: any) => {
+            // Normalize phone for comparison - remove spaces, dashes, and normalize
+            const normalizedPhone = r.phone ? String(r.phone).replace(/\s+/g, '').replace(/-/g, '').trim() : null;
+            if (normalizedPhone && normalizedPhone !== '' && normalizedPhone !== 'X' && normalizedPhone.toUpperCase() !== 'X') {
+              existingRecords.add(`phone:${normalizedPhone}`);
+            }
+            // Normalize contact_id
+            if (r.contact_id) {
+              const normalizedContactId = String(r.contact_id).trim();
+              if (normalizedContactId !== '' && normalizedContactId !== 'X' && normalizedContactId.toUpperCase() !== 'X') {
+                existingRecords.add(`contact_id:${normalizedContactId}`);
               }
-            });
-          }
-        }
-        
-        // Check by name+city for rows without phone/contact_id
-        if (nameCityPairs.length > 0) {
-          const uniqueNames = [...new Set(nameCityPairs.map(p => p.name))];
-          const uniqueCities = [...new Set(nameCityPairs.map(p => p.city))];
-          
-          const { data: existingByNameCity, error: nameCityError } = await supabaseClient
-            .from(table)
-            .select('full_name, city, phone, contact_id')
-            .in('full_name', uniqueNames)
-            .in('city', uniqueCities);
-          
-          if (!nameCityError && existingByNameCity) {
-            existingByNameCity.forEach((r: any) => {
-              if (r.full_name && r.city) {
-                const key = `${r.full_name.trim().toLowerCase()}_${r.city.trim().toLowerCase()}`;
-                existingNameCity.add(key);
+            }
+            // Add name+city combination for rows without phone/contact_id
+            if (r.full_name && r.city) {
+              const normalizedName = String(r.full_name).trim().toLowerCase();
+              const normalizedCity = String(r.city).trim().toLowerCase();
+              if (normalizedName && normalizedCity) {
+                existingNameCity.add(`${normalizedName}_${normalizedCity}`);
               }
-              // Also add phone/contact_id if found
-              if (r.phone) existingRecords.add(`phone:${r.phone}`);
-              if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
-            });
-          }
+            }
+          });
+        } else if (allExistingError) {
+          console.error(`Error loading existing records:`, allExistingError);
         }
         
         console.log(`Found ${existingRecords.size} existing records by phone/contact_id, ${existingNameCity.size} by name+city`);
@@ -621,17 +603,18 @@ Deno.serve(async (req) => {
         const dbDuplicates: { name: string; phone: string }[] = [];
 
         for (const row of uniqueRowsInFile) {
-          const phone = row.phone;
-          const contactId = row.contact_id;
+          // Normalize phone number for comparison
+          const phone = row.phone ? String(row.phone).replace(/\s+/g, '').replace(/-/g, '').trim() : null;
+          const contactId = row.contact_id ? String(row.contact_id).trim() : null;
           
           // Check if record already exists
-          const existsByPhone = phone && existingRecords.has(`phone:${phone}`);
-          const existsByContactId = contactId && existingRecords.has(`contact_id:${contactId}`);
+          const existsByPhone = phone && phone !== '' && existingRecords.has(`phone:${phone}`);
+          const existsByContactId = contactId && contactId !== '' && existingRecords.has(`contact_id:${contactId}`);
           
           // Also check by name+city if no phone/contact_id
           let existsByNameCity = false;
-          if (!phone && !contactId && row.full_name && row.city) {
-            const nameCityKey = `${row.full_name.trim().toLowerCase()}_${row.city.trim().toLowerCase()}`;
+          if ((!phone || phone === '') && (!contactId || contactId === '') && row.full_name && row.city) {
+            const nameCityKey = `${String(row.full_name).trim().toLowerCase()}_${String(row.city).trim().toLowerCase()}`;
             existsByNameCity = existingNameCity.has(nameCityKey);
           }
           
@@ -642,6 +625,10 @@ Deno.serve(async (req) => {
             });
             console.log(`Skipping duplicate: ${row.full_name} (phone: ${phone}, contact_id: ${contactId}, name+city: ${existsByNameCity})`);
           } else {
+            // Update phone in row to normalized version
+            if (phone) {
+              row.phone = phone;
+            }
             newRows.push(row);
           }
         }
