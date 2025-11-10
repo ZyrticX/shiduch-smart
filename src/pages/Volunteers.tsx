@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Search, Plus, Edit, Trash2, ArrowRight, Power, PowerOff, RotateCcw } from "lucide-react";
+import { Search, Plus, Edit, Trash2, ArrowRight, Power, PowerOff, RotateCcw, Eye } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import UserMatchesCard from "@/components/UserMatchesCard";
 
 interface User {
   id: string;
@@ -38,6 +39,8 @@ export default function Users() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [cardUser, setCardUser] = useState<User | null>(null);
 
   const [cities, setCities] = useState<string[]>([]);
   const [languages, setLanguages] = useState<string[]>([]);
@@ -255,6 +258,11 @@ export default function Users() {
     }
   };
 
+  const handleViewCard = (user: User) => {
+    setCardUser(user);
+    setCardOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8" dir="rtl">
       <div className="max-w-7xl mx-auto">
@@ -394,7 +402,14 @@ export default function Users() {
                           onCheckedChange={() => toggleSelection(user.id)}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{user.full_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <button
+                          onClick={() => handleViewCard(user)}
+                          className="hover:underline text-green-600 hover:text-green-800 transition-colors"
+                        >
+                          {user.full_name}
+                        </button>
+                      </TableCell>
                       <TableCell className="hidden sm:table-cell">{user.email}</TableCell>
                       <TableCell className="hidden md:table-cell">{user.phone || "-"}</TableCell>
                       <TableCell>{user.city}</TableCell>
@@ -421,11 +436,14 @@ export default function Users() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1 sm:gap-2">
-                          <Button size="sm" variant="outline" onClick={() => handleEdit(user)}>
+                        <div className="flex gap-1 flex-wrap">
+                          <Button size="sm" variant="outline" onClick={() => handleViewCard(user)} title="צפה בכרטיס">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(user)} title="ערוך">
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="destructive" onClick={() => handleDelete(user.id)}>
+                          <Button size="sm" variant="destructive" onClick={() => handleDelete(user.id)} title="מחק">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -531,6 +549,12 @@ export default function Users() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      <UserMatchesCard
+        user={cardUser}
+        open={cardOpen}
+        onOpenChange={setCardOpen}
+      />
     </div>
   );
 }

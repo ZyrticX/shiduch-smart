@@ -11,6 +11,7 @@ import Students from "./pages/Students";
 import Users from "./pages/Volunteers";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
+import Matching from "./pages/Matching";
 import NotFound from "./pages/NotFound";
 import Login from "./components/Login";
 import Footer from "./components/Footer";
@@ -109,6 +110,7 @@ const App = () => {
                 <Route path="/users" element={<Users />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/matching" element={<Matching />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

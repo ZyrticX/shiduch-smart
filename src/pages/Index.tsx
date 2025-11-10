@@ -102,6 +102,16 @@ const Index = () => {
               <span className="sm:hidden">התאמה</span>
             </Button>
             <Button 
+              onClick={() => navigate('/matching')}
+              variant="outline"
+              size="lg"
+              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
+            >
+              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span className="hidden md:inline">סריקה מתקדמת</span>
+              <span className="md:hidden">סריקה</span>
+            </Button>
+            <Button 
               onClick={() => navigate('/analytics')}
               variant="outline"
               size="lg"
