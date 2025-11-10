@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Search, Plus, Edit, Trash2, ArrowRight } from "lucide-react";
+import { Search, Plus, Edit, Trash2, ArrowRight, Eye, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import StudentCard from "@/components/StudentCard";
 
 interface Student {
   id: string;
@@ -34,6 +35,8 @@ export default function Students() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [cardOpen, setCardOpen] = useState(false);
+  const [cardStudent, setCardStudent] = useState<Student | null>(null);
 
   const [cities, setCities] = useState<string[]>([]);
   const [languages, setLanguages] = useState<string[]>([]);
@@ -165,6 +168,32 @@ export default function Students() {
     }
   };
 
+  const handleViewCard = (student: Student) => {
+    setCardStudent(student);
+    setCardOpen(true);
+  };
+
+  const handleGenerateMatches = async (studentId: string) => {
+    try {
+      toast.info("מריץ התאמה לחייל...");
+      const { data, error } = await supabase.functions.invoke("generate-matches", {
+        body: { studentId, minScore: 60 },
+      });
+
+      if (error) throw error;
+
+      if (data?.suggestedCount > 0) {
+        toast.success(`נמצאו ${data.suggestedCount} התאמות חדשות!`);
+        loadStudents();
+      } else {
+        toast.info("לא נמצאו התאמות מתאימות");
+      }
+    } catch (error: any) {
+      console.error("Error generating matches:", error);
+      toast.error("שגיאה בחיפוש התאמות");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8" dir="rtl">
       <div className="max-w-7xl mx-auto">
@@ -236,7 +265,7 @@ export default function Students() {
                   <TableHead className="text-right whitespace-nowrap">עיר</TableHead>
                   <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">שפת אם</TableHead>
                   <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">מין</TableHead>
-                  <TableHead className="text-right whitespace-nowrap hidden md:table-cell">שובץ</TableHead>
+                  <TableHead className="text-right whitespace-nowrap hidden md:table-cell">יש התאמה</TableHead>
                   <TableHead className="text-right whitespace-nowrap">פעולות</TableHead>
                 </TableRow>
               </TableHeader>
@@ -256,24 +285,37 @@ export default function Students() {
                 ) : (
                   filteredStudents.map((student) => (
                     <TableRow key={student.id}>
-                      <TableCell className="font-medium">{student.full_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <button
+                          onClick={() => handleViewCard(student)}
+                          className="hover:underline text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          {student.full_name}
+                        </button>
+                      </TableCell>
                       <TableCell className="hidden md:table-cell">{student.phone || "-"}</TableCell>
                       <TableCell>{student.city}</TableCell>
                       <TableCell className="hidden lg:table-cell">{student.native_language}</TableCell>
                       <TableCell className="hidden lg:table-cell">{student.gender || "-"}</TableCell>
                       <TableCell className="hidden md:table-cell">
                         <span className={`inline-flex px-2 py-1 rounded text-xs ${
-                          student.is_matched ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                          student.is_matched ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                         }`}>
                           {student.is_matched ? "כן" : "לא"}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="outline" onClick={() => handleEdit(student)}>
+                        <div className="flex gap-1 flex-wrap">
+                          <Button size="sm" variant="outline" onClick={() => handleViewCard(student)} title="צפה בכרטיס">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleGenerateMatches(student.id)} title="מצא התאמות">
+                            <Sparkles className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(student)} title="ערוך">
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="destructive" onClick={() => handleDelete(student.id)}>
+                          <Button size="sm" variant="destructive" onClick={() => handleDelete(student.id)} title="מחק">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -362,6 +404,12 @@ export default function Students() {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      <StudentCard
+        student={cardStudent}
+        open={cardOpen}
+        onOpenChange={setCardOpen}
+      />
     </div>
   );
 }

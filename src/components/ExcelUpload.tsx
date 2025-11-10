@@ -113,6 +113,18 @@ export function ExcelUpload() {
         throw new Error(data.error);
       }
 
+      // Show duplicates warning if any
+      if (data?.duplicates && data.duplicates.length > 0) {
+        console.warn("Duplicates found:", data.duplicates);
+        toast.warning(
+          `זוהו ${data.duplicates.length} כפילויות (לפי טלפון) - הרשומות לא נוספו`,
+          {
+            description: data.duplicates.slice(0, 3).map((d: any) => `${d.name} (${d.phone})`).join(', '),
+            duration: 8000,
+          }
+        );
+      }
+      
       if (data?.errors && data.errors.length > 0) {
         console.error("Import errors:", data.errors);
         const errorMessage = data.errors.join('\n');
