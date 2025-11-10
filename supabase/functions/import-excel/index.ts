@@ -527,145 +527,170 @@ Deno.serve(async (req) => {
       console.log(`✅ Processing ALL ${validRows.length} rows - no filtering, all will be imported`);
 
       if (validRows.length > 0) {
-        // Step 1: Deduplicate rows within the file itself
-        const uniqueRowsMap = new Map<string, any>();
-        const fileDuplicates: { name: string; phone: string }[] = [];
+        console.log(`Processing ${validRows.length} valid rows for table: ${table}`);
 
-        for (const row of validRows) {
-          const phone = row.phone;
-          // Use phone as key, or contact_id if phone is missing, or name+city as fallback
-          const key = phone || row.contact_id || `${row.full_name}_${row.city}`;
-          
-          if (key && uniqueRowsMap.has(key)) {
-            fileDuplicates.push({ name: row.full_name, phone: phone || 'ללא טלפון' });
-          } else {
-            uniqueRowsMap.set(key, row);
-          }
-        }
-        
-        const uniqueRowsInFile = Array.from(uniqueRowsMap.values());
-        console.log(`After file deduplication: ${uniqueRowsInFile.length} unique rows out of ${validRows.length} total rows`);
+        // Step 1: Normalize all phone numbers and contact IDs in the input data
+        const normalizedRows = validRows.map(row => ({
+          ...row,
+          phone: row.phone ? String(row.phone).replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').trim() : null,
+          contact_id: row.contact_id ? String(row.contact_id).trim() : null,
+          full_name: row.full_name ? String(row.full_name).trim() : null,
+          city: row.city ? String(row.city).trim() : null
+        }));
 
-        // Step 2: Check against existing records in database
-        // Get all phones and contact_ids from unique rows (normalize phone numbers)
-        const phonesToCheck = uniqueRowsInFile
-          .map(r => r.phone ? String(r.phone).replace(/\s+/g, '').replace(/-/g, '').trim() : null)
-          .filter(Boolean);
-        const contactIdsToCheck = uniqueRowsInFile
-          .map(r => r.contact_id ? String(r.contact_id).trim() : null)
-          .filter(Boolean);
-        
-        // Also check by name+city for rows without phone/contact_id
-        const nameCityPairs = uniqueRowsInFile
-          .filter(r => !r.phone && !r.contact_id)
-          .map(r => ({ name: r.full_name, city: r.city }));
-        
-        // Load ALL existing records from database to check against (single query is more reliable)
-        let existingRecords = new Set<string>();
-        let existingNameCity = new Set<string>();
-        
-        const { data: allExisting, error: allExistingError } = await supabaseClient
+        console.log(`Normalized ${normalizedRows.length} rows for duplicate checking`);
+
+        // Step 2: Load ALL existing records from database for comparison
+        console.log(`Loading existing records from ${table} for duplicate check...`);
+        const { data: existingRecords, error: existingError } = await supabaseClient
           .from(table)
-          .select('phone, contact_id, full_name, city');
-        
-        if (!allExistingError && allExisting) {
-          console.log(`Loading ${allExisting.length} existing records from database for duplicate check`);
-          allExisting.forEach((r: any) => {
-            // Normalize phone for comparison - remove spaces, dashes, and normalize
-            const normalizedPhone = r.phone ? String(r.phone).replace(/\s+/g, '').replace(/-/g, '').trim() : null;
-            if (normalizedPhone && normalizedPhone !== '' && normalizedPhone !== 'X' && normalizedPhone.toUpperCase() !== 'X') {
-              existingRecords.add(`phone:${normalizedPhone}`);
-            }
-            // Normalize contact_id
-            if (r.contact_id) {
-              const normalizedContactId = String(r.contact_id).trim();
-              if (normalizedContactId !== '' && normalizedContactId !== 'X' && normalizedContactId.toUpperCase() !== 'X') {
-                existingRecords.add(`contact_id:${normalizedContactId}`);
-              }
-            }
-            // Add name+city combination for rows without phone/contact_id
-            if (r.full_name && r.city) {
-              const normalizedName = String(r.full_name).trim().toLowerCase();
-              const normalizedCity = String(r.city).trim().toLowerCase();
-              if (normalizedName && normalizedCity) {
-                existingNameCity.add(`${normalizedName}_${normalizedCity}`);
-              }
-            }
-          });
-        } else if (allExistingError) {
-          console.error(`Error loading existing records:`, allExistingError);
-        }
-        
-        console.log(`Found ${existingRecords.size} existing records by phone/contact_id, ${existingNameCity.size} by name+city`);
+          .select('id, phone, contact_id, full_name, city, email');
 
-        // Step 3: Filter out rows that already exist in database
+        if (existingError) {
+          console.error(`Error loading existing records:`, existingError);
+          errors.push(`[${sheetDisplayName}] שגיאה בטעינת רשומות קיימות: ${existingError.message}`);
+          continue;
+        }
+
+        console.log(`Loaded ${existingRecords?.length || 0} existing records from database`);
+
+        // Step 3: Create lookup maps for existing records (normalized)
+        const existingPhones = new Map<string, any>();
+        const existingContacts = new Map<string, any>();
+        const existingNameCity = new Map<string, any>();
+        const existingEmails = new Set<string>();
+
+        existingRecords?.forEach(record => {
+          // Normalize phone for comparison
+          const normalizedPhone = record.phone ? String(record.phone).replace(/\s+/g, '').replace(/-/g, '').replace(/\(/g, '').replace(/\)/g, '').trim() : null;
+          if (normalizedPhone && normalizedPhone !== '' && normalizedPhone !== 'X' && normalizedPhone.toUpperCase() !== 'X') {
+            existingPhones.set(normalizedPhone, record);
+          }
+
+          // Normalize contact_id
+          const normalizedContact = record.contact_id ? String(record.contact_id).trim() : null;
+          if (normalizedContact && normalizedContact !== '' && normalizedContact !== 'X' && normalizedContact.toUpperCase() !== 'X') {
+            existingContacts.set(normalizedContact, record);
+          }
+
+          // Name + city combination
+          const normalizedName = record.full_name ? String(record.full_name).trim().toLowerCase() : null;
+          const normalizedCity = record.city ? String(record.city).trim().toLowerCase() : null;
+          if (normalizedName && normalizedCity) {
+            const key = `${normalizedName}_${normalizedCity}`;
+            existingNameCity.set(key, record);
+          }
+
+          // Email (for additional safety)
+          if (record.email) {
+            existingEmails.add(String(record.email).trim().toLowerCase());
+          }
+        });
+
+        console.log(`Created lookup maps: ${existingPhones.size} phones, ${existingContacts.size} contacts, ${existingNameCity.size} name+city combinations`);
+
+        // Step 4: Filter out duplicates and prepare new rows
         const newRows: any[] = [];
-        const dbDuplicates: { name: string; phone: string }[] = [];
+        const tableDuplicates: { name: string; phone: string }[] = [];
 
-        for (const row of uniqueRowsInFile) {
-          // Normalize phone number for comparison
-          const phone = row.phone ? String(row.phone).replace(/\s+/g, '').replace(/-/g, '').trim() : null;
-          const contactId = row.contact_id ? String(row.contact_id).trim() : null;
-          
-          // Check if record already exists
-          const existsByPhone = phone && phone !== '' && existingRecords.has(`phone:${phone}`);
-          const existsByContactId = contactId && contactId !== '' && existingRecords.has(`contact_id:${contactId}`);
-          
-          // Also check by name+city if no phone/contact_id
-          let existsByNameCity = false;
-          if ((!phone || phone === '') && (!contactId || contactId === '') && row.full_name && row.city) {
-            const nameCityKey = `${String(row.full_name).trim().toLowerCase()}_${String(row.city).trim().toLowerCase()}`;
-            existsByNameCity = existingNameCity.has(nameCityKey);
-          }
-          
-          if (existsByPhone || existsByContactId || existsByNameCity) {
-            dbDuplicates.push({ 
-              name: row.full_name, 
-              phone: phone || contactId || (existsByNameCity ? `${row.full_name} - ${row.city}` : 'ללא מזהה')
-            });
-            console.log(`Skipping duplicate: ${row.full_name} (phone: ${phone}, contact_id: ${contactId}, name+city: ${existsByNameCity})`);
-          } else {
-            // Update phone in row to normalized version
-            if (phone) {
-              row.phone = phone;
+        for (const row of normalizedRows) {
+          const phone = row.phone;
+          const contactId = row.contact_id;
+          const fullName = row.full_name;
+          const city = row.city;
+
+          let isDuplicate = false;
+          let duplicateReason = '';
+          let existingRecord = null;
+
+          // Check by phone
+          if (phone && phone !== '') {
+            existingRecord = existingPhones.get(phone);
+            if (existingRecord) {
+              isDuplicate = true;
+              duplicateReason = `phone: ${phone}`;
             }
+          }
+
+          // Check by contact_id (if not already duplicate)
+          if (!isDuplicate && contactId && contactId !== '') {
+            existingRecord = existingContacts.get(contactId);
+            if (existingRecord) {
+              isDuplicate = true;
+              duplicateReason = `contact_id: ${contactId}`;
+            }
+          }
+
+          // Check by name+city (if not already duplicate and no phone/contact_id)
+          if (!isDuplicate && (!phone || phone === '') && (!contactId || contactId === '') && fullName && city) {
+            const nameCityKey = `${String(fullName).trim().toLowerCase()}_${String(city).trim().toLowerCase()}`;
+            existingRecord = existingNameCity.get(nameCityKey);
+            if (existingRecord) {
+              isDuplicate = true;
+              duplicateReason = `name+city: ${fullName} - ${city}`;
+            }
+          }
+
+          // Check by email (last resort)
+          if (!isDuplicate && row.email && row.email !== '') {
+            if (existingEmails.has(String(row.email).trim().toLowerCase())) {
+              isDuplicate = true;
+              duplicateReason = `email: ${row.email}`;
+            }
+          }
+
+          if (isDuplicate) {
+            tableDuplicates.push({
+              name: fullName || 'ללא שם',
+              phone: phone || contactId || duplicateReason || 'ללא מזהה'
+            });
+            console.log(`DUPLICATE FOUND: ${fullName} (${duplicateReason}) - skipping`);
+          } else {
             newRows.push(row);
+            console.log(`NEW RECORD: ${fullName} (${phone || contactId || 'no identifier'})`);
           }
         }
-        
-        // Combine file duplicates and database duplicates
-        duplicates.push(...fileDuplicates, ...dbDuplicates);
-        
-        console.log(`After database check: ${newRows.length} new rows to insert, ${dbDuplicates.length} duplicates skipped`);
 
-        // Step 4: Insert only new rows
+        // Add duplicates to global list
+        duplicates.push(...tableDuplicates);
+
+        console.log(`After duplicate check: ${newRows.length} new rows to insert, ${tableDuplicates.length} duplicates skipped`);
+
+        // Step 5: Insert only new rows
         if (newRows.length > 0) {
-          const batchSize = 100;
-          let totalUpsertedForTable = 0;
-          
+          const batchSize = 50; // Smaller batches for safety
+          let totalInsertedForTable = 0;
+
           for (let i = 0; i < newRows.length; i += batchSize) {
             const batch = newRows.slice(i, i + batchSize);
-            console.log(`Processing batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(newRows.length / batchSize)} (${batch.length} rows)`);
-            
-            const { data: upsertedData, error: upsertError } = await supabaseClient
-              .from(table)
-              .insert(batch) // Use insert instead of upsert since we already checked for duplicates
-              .select();
+            console.log(`Inserting batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(newRows.length / batchSize)} (${batch.length} rows)`);
 
-            if (upsertError) {
-              console.error(`Error inserting batch into ${table}:`, upsertError);
-              errors.push(`[${sheetDisplayName}] שגיאה בהכנסת ${table} (batch ${Math.floor(i / batchSize) + 1}): ${upsertError.message}`);
-              continue;
+            try {
+              const { data: insertedData, error: insertError } = await supabaseClient
+                .from(table)
+                .insert(batch)
+                .select();
+
+              if (insertError) {
+                console.error(`Insert error for batch ${Math.floor(i / batchSize) + 1}:`, insertError);
+                errors.push(`[${sheetDisplayName}] שגיאה בהכנסת batch ${Math.floor(i / batchSize) + 1}: ${insertError.message}`);
+                continue;
+              }
+
+              const insertedCount = insertedData?.length || 0;
+              totalInsertedForTable += insertedCount;
+              console.log(`Successfully inserted ${insertedCount} rows in batch ${Math.floor(i / batchSize) + 1}`);
+
+            } catch (batchError: any) {
+              console.error(`Unexpected error in batch ${Math.floor(i / batchSize) + 1}:`, batchError);
+              errors.push(`[${sheetDisplayName}] שגיאה בלתי צפויה ב-batch ${Math.floor(i / batchSize) + 1}: ${batchError.message}`);
             }
-
-            totalUpsertedForTable += upsertedData?.length || 0;
-            console.log(`Successfully inserted ${upsertedData?.length || 0} rows in batch ${Math.floor(i / batchSize) + 1}`);
           }
-          
-          totalUpserted += totalUpsertedForTable;
-          console.log(`Successfully inserted total ${totalUpsertedForTable} new rows into ${table}`);
+
+          totalUpserted += totalInsertedForTable;
+          console.log(`Successfully inserted total ${totalInsertedForTable} new rows into ${table}`);
         } else {
-          console.log(`No new rows to insert for ${table} - all rows already exist in database`);
+          console.log(`No new rows to insert for ${table} - all rows are duplicates`);
         }
       }
     }
