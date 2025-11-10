@@ -523,54 +523,120 @@ Deno.serve(async (req) => {
       console.log(`✅ Processing ALL ${validRows.length} rows - no filtering, all will be imported`);
 
       if (validRows.length > 0) {
-        // Deduplicate rows by phone before upserting to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        // Step 1: Deduplicate rows within the file itself
         const uniqueRowsMap = new Map<string, any>();
-        const tableDuplicates: { name: string; phone: string }[] = [];
+        const fileDuplicates: { name: string; phone: string }[] = [];
 
         for (const row of validRows) {
           const phone = row.phone;
-          if (phone && uniqueRowsMap.has(phone)) {
-            tableDuplicates.push({ name: row.full_name, phone: phone });
-          } else {
-            uniqueRowsMap.set(phone, row);
-          }
-        }
-        
-        // Add table duplicates to global duplicates array
-        duplicates.push(...tableDuplicates);
-        const uniqueRows = Array.from(uniqueRowsMap.values());
-
-        console.log(`After deduplication: ${uniqueRows.length} unique rows out of ${validRows.length} total rows`);
-
-        // Use upsert based on phone (unique constraint)
-        // Process in smaller batches to avoid timeout issues
-        const batchSize = 100;
-        let totalUpsertedForTable = 0;
-        
-        for (let i = 0; i < uniqueRows.length; i += batchSize) {
-          const batch = uniqueRows.slice(i, i + batchSize);
-          console.log(`Processing batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(uniqueRows.length / batchSize)} (${batch.length} rows)`);
+          // Use phone as key, or contact_id if phone is missing, or name+city as fallback
+          const key = phone || row.contact_id || `${row.full_name}_${row.city}`;
           
-          const { data: upsertedData, error: upsertError } = await supabaseClient
-            .from(table)
-            .upsert(batch, {
-              onConflict: 'phone', // Use phone for conflict resolution
-              ignoreDuplicates: false
-            })
-            .select();
-
-          if (upsertError) {
-            console.error(`Error upserting batch into ${table}:`, upsertError);
-            errors.push(`[${sheetDisplayName}] שגיאה בעדכון ${table} (batch ${Math.floor(i / batchSize) + 1}): ${upsertError.message}`);
-            continue;
+          if (key && uniqueRowsMap.has(key)) {
+            fileDuplicates.push({ name: row.full_name, phone: phone || 'ללא טלפון' });
+          } else {
+            uniqueRowsMap.set(key, row);
           }
-
-          totalUpsertedForTable += upsertedData?.length || 0;
-          console.log(`Successfully upserted ${upsertedData?.length || 0} rows in batch ${Math.floor(i / batchSize) + 1}`);
         }
         
-        totalUpserted += totalUpsertedForTable;
-        console.log(`Successfully upserted total ${totalUpsertedForTable} rows into ${table}`);
+        const uniqueRowsInFile = Array.from(uniqueRowsMap.values());
+        console.log(`After file deduplication: ${uniqueRowsInFile.length} unique rows out of ${validRows.length} total rows`);
+
+        // Step 2: Check against existing records in database
+        // Get all phones and contact_ids from unique rows
+        const phonesToCheck = uniqueRowsInFile.map(r => r.phone).filter(Boolean);
+        const contactIdsToCheck = uniqueRowsInFile.map(r => r.contact_id).filter(Boolean);
+        
+        // Load existing records from database
+        let existingRecords = new Set<string>();
+        
+        if (phonesToCheck.length > 0) {
+          const { data: existingByPhone, error: phoneError } = await supabaseClient
+            .from(table)
+            .select('phone, contact_id')
+            .in('phone', phonesToCheck);
+          
+          if (!phoneError && existingByPhone) {
+            existingByPhone.forEach((r: any) => {
+              if (r.phone) existingRecords.add(`phone:${r.phone}`);
+              if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
+            });
+          }
+        }
+        
+        if (contactIdsToCheck.length > 0) {
+          const { data: existingByContactId, error: contactError } = await supabaseClient
+            .from(table)
+            .select('phone, contact_id')
+            .in('contact_id', contactIdsToCheck);
+          
+          if (!contactError && existingByContactId) {
+            existingByContactId.forEach((r: any) => {
+              if (r.phone) existingRecords.add(`phone:${r.phone}`);
+              if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
+            });
+          }
+        }
+        
+        console.log(`Found ${existingRecords.size} existing records in database`);
+
+        // Step 3: Filter out rows that already exist in database
+        const newRows: any[] = [];
+        const dbDuplicates: { name: string; phone: string }[] = [];
+
+        for (const row of uniqueRowsInFile) {
+          const phone = row.phone;
+          const contactId = row.contact_id;
+          
+          // Check if record already exists
+          const existsByPhone = phone && existingRecords.has(`phone:${phone}`);
+          const existsByContactId = contactId && existingRecords.has(`contact_id:${contactId}`);
+          
+          if (existsByPhone || existsByContactId) {
+            dbDuplicates.push({ 
+              name: row.full_name, 
+              phone: phone || contactId || 'ללא מזהה' 
+            });
+            console.log(`Skipping duplicate: ${row.full_name} (phone: ${phone}, contact_id: ${contactId})`);
+          } else {
+            newRows.push(row);
+          }
+        }
+        
+        // Combine file duplicates and database duplicates
+        duplicates.push(...fileDuplicates, ...dbDuplicates);
+        
+        console.log(`After database check: ${newRows.length} new rows to insert, ${dbDuplicates.length} duplicates skipped`);
+
+        // Step 4: Insert only new rows
+        if (newRows.length > 0) {
+          const batchSize = 100;
+          let totalUpsertedForTable = 0;
+          
+          for (let i = 0; i < newRows.length; i += batchSize) {
+            const batch = newRows.slice(i, i + batchSize);
+            console.log(`Processing batch ${Math.floor(i / batchSize) + 1} of ${Math.ceil(newRows.length / batchSize)} (${batch.length} rows)`);
+            
+            const { data: upsertedData, error: upsertError } = await supabaseClient
+              .from(table)
+              .insert(batch) // Use insert instead of upsert since we already checked for duplicates
+              .select();
+
+            if (upsertError) {
+              console.error(`Error inserting batch into ${table}:`, upsertError);
+              errors.push(`[${sheetDisplayName}] שגיאה בהכנסת ${table} (batch ${Math.floor(i / batchSize) + 1}): ${upsertError.message}`);
+              continue;
+            }
+
+            totalUpsertedForTable += upsertedData?.length || 0;
+            console.log(`Successfully inserted ${upsertedData?.length || 0} rows in batch ${Math.floor(i / batchSize) + 1}`);
+          }
+          
+          totalUpserted += totalUpsertedForTable;
+          console.log(`Successfully inserted total ${totalUpsertedForTable} new rows into ${table}`);
+        } else {
+          console.log(`No new rows to insert for ${table} - all rows already exist in database`);
+        }
       }
     }
 
