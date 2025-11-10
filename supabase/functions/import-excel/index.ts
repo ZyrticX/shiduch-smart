@@ -15,18 +15,34 @@ interface ImportRequest {
 }
 
 Deno.serve(async (req) => {
+  console.log("🚀 import-excel function called with method:", req.method, "at", new Date().toISOString());
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders, status: 200 });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    console.log("🔧 Initializing function...");
+
+    // Hardcoded for now to fix environment issues
+    const supabaseUrl = "https://otryosdpmcyojffljkcb.supabase.co";
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im90cnVvc2RwbWN5b2pmZmxqa2NiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzY0NTM0NSwiZXhwIjoyMDQ5MjIxMzQ1fQ.4Y8J9nLrMqKsPwRtVxFgHjXaBcDeMnOpTuVwI";
+
+    console.log("🔧 Using hardcoded Supabase credentials");
+
     const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
-    const { data: requestData } = await req.json() as { data: ImportRequest['data'] };
+    console.log("🔧 Supabase client created successfully");
+
+    const requestBody = await req.json();
+    console.log("📦 Request body received:", JSON.stringify(requestBody, null, 2));
+
+    const { data: requestData } = requestBody as { data: ImportRequest['data'] };
+
+    console.log("🔍 Request data validation:", { isArray: Array.isArray(requestData), length: requestData?.length });
 
     if (!requestData || !Array.isArray(requestData)) {
+      console.error("❌ Invalid request format:", requestData);
       throw new Error('Invalid request format');
     }
 
@@ -528,6 +544,7 @@ Deno.serve(async (req) => {
 
       if (validRows.length > 0) {
         console.log(`Processing ${validRows.length} valid rows for table: ${table}`);
+      console.log("Sample row before normalization:", validRows[0]);
 
         // Step 1: Normalize all phone numbers and contact IDs in the input data
         const normalizedRows = validRows.map(row => ({
@@ -539,6 +556,7 @@ Deno.serve(async (req) => {
         }));
 
         console.log(`Normalized ${normalizedRows.length} rows for duplicate checking`);
+        console.log("Sample normalized row:", normalizedRows[0]);
 
         // Step 2: Load ALL existing records from database for comparison
         console.log(`Loading existing records from ${table} for duplicate check...`);
@@ -553,6 +571,7 @@ Deno.serve(async (req) => {
         }
 
         console.log(`Loaded ${existingRecords?.length || 0} existing records from database`);
+        console.log("Sample existing record:", existingRecords?.[0]);
 
         // Step 3: Create lookup maps for existing records (normalized)
         const existingPhones = new Map<string, any>();
@@ -588,6 +607,8 @@ Deno.serve(async (req) => {
         });
 
         console.log(`Created lookup maps: ${existingPhones.size} phones, ${existingContacts.size} contacts, ${existingNameCity.size} name+city combinations`);
+        console.log("First 3 phone keys:", Array.from(existingPhones.keys()).slice(0, 3));
+        console.log("First 3 contact keys:", Array.from(existingContacts.keys()).slice(0, 3));
 
         // Step 4: Filter out duplicates and prepare new rows
         const newRows: any[] = [];
@@ -644,10 +665,10 @@ Deno.serve(async (req) => {
               name: fullName || 'ללא שם',
               phone: phone || contactId || duplicateReason || 'ללא מזהה'
             });
-            console.log(`DUPLICATE FOUND: ${fullName} (${duplicateReason}) - skipping`);
+            console.log(`❌ DUPLICATE FOUND: ${fullName} (${duplicateReason}) - SKIPPING`);
           } else {
             newRows.push(row);
-            console.log(`NEW RECORD: ${fullName} (${phone || contactId || 'no identifier'})`);
+            console.log(`✅ NEW RECORD: ${fullName} (${phone || contactId || 'no identifier'})`);
           }
         }
 
@@ -655,6 +676,7 @@ Deno.serve(async (req) => {
         duplicates.push(...tableDuplicates);
 
         console.log(`After duplicate check: ${newRows.length} new rows to insert, ${tableDuplicates.length} duplicates skipped`);
+        console.log("New rows sample:", newRows.slice(0, 2));
 
         // Step 5: Insert only new rows
         if (newRows.length > 0) {
