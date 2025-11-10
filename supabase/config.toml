@@ -1,4 +1,16 @@
-project_id = "lijxsieewetgiiisknnj"
+project_id = "otryosdpmcyojffljkcb"
 
 [functions.import-excel]
+verify_jwt = false
+
+[functions.generate-matches]
+verify_jwt = false
+
+[functions.notify-match]
+verify_jwt = false
+
+[functions.update-match-status]
+verify_jwt = false
+
+[functions.geocode-cities]
 verify_jwt = false
