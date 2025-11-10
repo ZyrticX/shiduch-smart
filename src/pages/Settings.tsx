@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, Save, Settings, Target, TrendingUp, Sparkles, Loader2 } from "lucide-react";
+import { ArrowRight, Save, Settings, Target, TrendingUp, Sparkles, Loader2, Trash2, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface Setting {
@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Setting[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -127,6 +128,59 @@ export default function SettingsPage() {
 
   const getSettingValue = (key: string): string => {
     return settings.find((s) => s.key === key)?.value || "";
+  };
+
+  const handleDeleteAllData = async () => {
+    const confirmMessage = "⚠️ אזהרה: פעולה זו תמחק את כל הנתונים במאגר!\n\nזה כולל:\n- כל התלמידים\n- כל המשתמשים\n- כל ההתאמות\n- כל הלוגים\n- כל היסטוריית הסריקות\n\nפעולה זו בלתי הפיכה!\n\nהקלד 'מחק הכל' כדי לאשר:";
+    
+    const userInput = prompt(confirmMessage);
+    
+    if (userInput !== "מחק הכל") {
+      toast.info("הפעולה בוטלה");
+      return;
+    }
+
+    // Double confirmation
+    if (!confirm("האם אתה בטוח לחלוטין שברצונך למחוק את כל הנתונים? פעולה זו בלתי הפיכה!")) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      // Delete in order (respecting foreign keys)
+      const tables = [
+        'audit_log',
+        'scan_history',
+        'matches',
+        'students',
+        'users'
+      ];
+
+      for (const table of tables) {
+        // Delete all rows - using a condition that's always true
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .gte('created_at', '1970-01-01'); // This will match all rows since created_at is always >= 1970
+
+        if (error) {
+          console.error(`Error deleting from ${table}:`, error);
+          // Continue with other tables even if one fails
+        }
+      }
+
+      toast.success("כל הנתונים נמחקו בהצלחה");
+      
+      // Reload page after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (error: any) {
+      console.error("Error deleting data:", error);
+      toast.error("שגיאה במחיקת הנתונים");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const matchingSettings = settings.filter((s) => s.category === "matching");
@@ -259,12 +313,49 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Danger Zone */}
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              אזור מסוכן
+            </CardTitle>
+            <CardDescription className="text-destructive/80">
+              פעולות בלתי הפיכות - השתמש בזהירות!
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={handleDeleteAllData} 
+              variant="destructive" 
+              size="lg" 
+              className="w-full"
+              disabled={deleting || saving}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  מוחק...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="ml-2 h-4 w-4" />
+                  מחק את כל הנתונים במאגר
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              פעולה זו תמחק את כל התלמידים, המשתמשים, ההתאמות והלוגים. פעולה בלתי הפיכה!
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <Button onClick={resetToDefaults} variant="outline" size="lg" className="flex-1 sm:flex-initial" disabled={saving}>
+          <Button onClick={resetToDefaults} variant="outline" size="lg" className="flex-1 sm:flex-initial" disabled={saving || deleting}>
             איפוס לברירות מחדל
           </Button>
-          <Button onClick={handleSave} disabled={saving} size="lg" className="flex-1 sm:flex-initial">
+          <Button onClick={handleSave} disabled={saving || deleting} size="lg" className="flex-1 sm:flex-initial">
             {saving ? (
               <>
                 <Loader2 className="ml-2 h-4 w-4 animate-spin" />

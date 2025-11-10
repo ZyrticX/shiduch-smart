@@ -212,11 +212,26 @@ serve(async (req) => {
     const matches = [];
     const usedStudents = new Set<string>();
     const userCapacity = new Map<string, number>();
+    const userSuggestedMatches = new Map<string, number>(); // Track suggested matches per user
 
     // Initialize user capacity tracking
     availableUsers.forEach((u: User) => {
       userCapacity.set(u.id, u.capacity_max - u.current_students);
+      userSuggestedMatches.set(u.id, 0); // Initialize suggested matches counter
     });
+
+    // Count existing suggested matches per user
+    const { data: existingSuggestedMatches } = await supabaseClient
+      .from("matches")
+      .select("user_id")
+      .eq("status", "Suggested");
+
+    if (existingSuggestedMatches) {
+      existingSuggestedMatches.forEach((match: any) => {
+        const currentCount = userSuggestedMatches.get(match.user_id) || 0;
+        userSuggestedMatches.set(match.user_id, currentCount + 1);
+      });
+    }
 
     // Calculate all possible matches
     const possibleMatches = [];
@@ -297,16 +312,25 @@ serve(async (req) => {
     console.log(`Generated ${possibleMatches.length} possible matches`);
 
     // Greedy allocation - assign best matches first
+    // Limit: max 5 suggested matches per user (to prevent spam)
+    const MAX_SUGGESTED_MATCHES_PER_USER = 5;
+
     for (const match of possibleMatches) {
       // Skip if student already matched
       if (usedStudents.has(match.student_id)) {
         continue;
       }
 
-      // Check user capacity
+      // Check user capacity (for approved matches)
       const capacity = userCapacity.get(match.user_id) || 0;
       if (capacity <= 0) {
         continue;
+      }
+
+      // Check how many suggested matches this user already has
+      const currentSuggestedCount = userSuggestedMatches.get(match.user_id) || 0;
+      if (currentSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_USER) {
+        continue; // Skip - user already has enough suggested matches
       }
 
       // Check if match already exists
@@ -327,7 +351,8 @@ serve(async (req) => {
         });
 
         usedStudents.add(match.student_id);
-        userCapacity.set(match.user_id, capacity - 1);
+        // Update suggested matches counter for this user
+        userSuggestedMatches.set(match.user_id, currentSuggestedCount + 1);
 
         // Stop if we reached the limit
         if (matches.length >= finalLimit) {
