@@ -277,43 +277,40 @@ Deno.serve(async (req) => {
             row.native_language = 'לא צוין';
           }
           
+          // ALWAYS generate unique email - required by DB but not displayed to user
+          // Use row index + timestamp + random to ensure uniqueness across all rows
+          const timestamp = Date.now();
+          const random = Math.floor(Math.random() * 1000000);
+          
+          if (!row.email || row.email.trim() === '') {
+            // Strategy 1: Try phone if available
+            if (row.phone) {
+              const phoneClean = String(row.phone).replace(/\D/g, '');
+              if (phoneClean.length > 0) {
+                row.email = `imported_${phoneClean}_${index}_${timestamp}_${random}@shiduch.local`;
+              }
+            }
+            
+            // Strategy 2: Generate from name + index + timestamp if no phone
+            if (!row.email || row.email.trim() === '') {
+              const nameForEmail = row.full_name 
+                ? row.full_name.replace(/\s+/g, '.').replace(/[^a-zA-Z0-9.]/g, '').toLowerCase().substring(0, 20)
+                : 'user';
+              row.email = `${nameForEmail}_${index}_${timestamp}_${random}@shiduch.local`;
+            }
+            
+            // Strategy 3: If still no email (shouldn't happen), use UUID-based
+            if (!row.email || row.email.trim() === '') {
+              const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
+              row.email = `imported_${uuid.replace(/-/g, '')}_${index}@shiduch.local`;
+            }
+          } else {
+            row.email = String(row.email).trim();
+          }
+          
           return row;
         })
         .filter((row: any) => row !== null); // Remove null rows (skipped empty rows)
-        
-        // ALWAYS generate unique email - required by DB but not displayed to user
-        // Use row index + timestamp + random to ensure uniqueness across all rows
-        const timestamp = Date.now();
-        const random = Math.floor(Math.random() * 1000000);
-        
-        if (!row.email || row.email.trim() === '') {
-          // Strategy 1: Try phone if available
-          if (row.phone) {
-            const phoneClean = String(row.phone).replace(/\D/g, '');
-            if (phoneClean.length > 0) {
-              row.email = `imported_${phoneClean}_${index}_${timestamp}_${random}@shiduch.local`;
-            }
-          }
-          
-          // Strategy 2: Generate from name + index + timestamp if no phone
-          if (!row.email || row.email.trim() === '') {
-            const nameForEmail = row.full_name 
-              ? row.full_name.replace(/\s+/g, '.').replace(/[^a-zA-Z0-9.]/g, '').toLowerCase().substring(0, 20)
-              : 'user';
-            row.email = `${nameForEmail}_${index}_${timestamp}_${random}@shiduch.local`;
-          }
-          
-          // Strategy 3: If still no email (shouldn't happen), use UUID-based
-          if (!row.email || row.email.trim() === '') {
-            const uuid = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
-            row.email = `imported_${uuid.replace(/-/g, '')}_${index}@shiduch.local`;
-          }
-        } else {
-          row.email = String(row.email).trim();
-        }
-        
-        return row;
-      });
       
       // Filtered out empty rows marked with X
       const skippedRows = mappedRows.length - validRows.length;
