@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, MapPin, Languages, Phone } from "lucide-react";
+import { CheckCircle2, XCircle, MapPin, Languages, Phone, Calendar, User, Building2, Flag, Briefcase } from "lucide-react";
 
 interface User {
   id: string;
@@ -16,6 +16,23 @@ interface User {
   gender: string | null;
   capacity_max: number;
   current_students: number;
+  contact_id?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  last_report_date?: string | null;
+  last_call_date?: string | null;
+  coordinator?: string | null;
+  country_of_origin?: string | null;
+  how_arrived_to_organization?: string | null;
+  arrival_other_notes?: string | null;
+  project_affiliation?: string | null;
+  volunteer_start_date?: string | null;
+  languages?: string | null;
+  status_notes?: string | null;
+  user_status?: string | null;
+  is_active?: boolean | null;
+  scholarship_active?: boolean | null;
+  created_at?: string | null;
 }
 
 interface Match {
@@ -144,7 +161,9 @@ export default function UserMatchesCard({ user, open, onOpenChange }: UserMatche
           {/* User Info */}
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-lg border border-green-200">
             <h3 className="text-xl font-bold mb-4 text-right">{user.full_name}</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            
+            {/* Basic Info Section */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mb-4">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-green-600" />
                 <span className="font-medium">עיר:</span>
@@ -162,13 +181,123 @@ export default function UserMatchesCard({ user, open, onOpenChange }: UserMatche
                   <span>{user.phone}</span>
                 </div>
               )}
+              {user.gender && (
+                <div className="flex items-center gap-2">
+                  <User className="h-4 w-4 text-green-600" />
+                  <span className="font-medium">מין:</span>
+                  <span>{user.gender}</span>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <span className="font-medium">קיבולת:</span>
                 <span className={approvedMatches >= user.capacity_max ? "text-red-600 font-bold" : "text-green-600"}>
                   {capacityStatus}
                 </span>
               </div>
+              {user.user_status && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">סטטוס:</span>
+                  <Badge variant="outline">{user.user_status}</Badge>
+                </div>
+              )}
+              {user.contact_id && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">מזהה איש קשר:</span>
+                  <span className="text-xs font-mono">{user.contact_id}</span>
+                </div>
+              )}
+              {user.is_active !== null && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">פעיל:</span>
+                  <Badge variant={user.is_active ? "default" : "secondary"}>
+                    {user.is_active ? "כן" : "לא"}
+                  </Badge>
+                </div>
+              )}
+              {user.scholarship_active !== null && (
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">מלגה פעילה:</span>
+                  <Badge variant={user.scholarship_active ? "default" : "secondary"}>
+                    {user.scholarship_active ? "כן" : "לא"}
+                  </Badge>
+                </div>
+              )}
             </div>
+
+            {/* Organization Info */}
+            {(user.coordinator || user.project_affiliation || user.how_arrived_to_organization || user.country_of_origin || user.languages) && (
+              <div className="mt-4 pt-4 border-t border-green-200">
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  פרטי ארגון
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  {user.coordinator && (
+                    <div>
+                      <span className="font-medium">רכז:</span> {user.coordinator}
+                    </div>
+                  )}
+                  {user.project_affiliation && (
+                    <div>
+                      <span className="font-medium">שיכות לפרויקט:</span> {user.project_affiliation}
+                    </div>
+                  )}
+                  {user.how_arrived_to_organization && (
+                    <div>
+                      <span className="font-medium">כיצד הגיע לעמותה:</span> {user.how_arrived_to_organization}
+                    </div>
+                  )}
+                  {user.country_of_origin && (
+                    <div className="flex items-center gap-2">
+                      <Flag className="h-3 w-3" />
+                      <span className="font-medium">ארץ מוצא:</span> {user.country_of_origin}
+                    </div>
+                  )}
+                  {user.languages && (
+                    <div>
+                      <span className="font-medium">שפות:</span> {user.languages}
+                    </div>
+                  )}
+                </div>
+                {user.arrival_other_notes && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    הערות הגעה: {user.arrival_other_notes}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Status Notes */}
+            {user.status_notes && (
+              <div className="mt-4 pt-4 border-t border-green-200">
+                <span className="font-medium text-sm">הערות לסטטוס:</span>
+                <p className="text-sm mt-1">{user.status_notes}</p>
+              </div>
+            )}
+
+            {/* Dates */}
+            {(user.volunteer_start_date || user.last_report_date || user.last_call_date || user.created_at) && (
+              <div className="mt-4 pt-4 border-t border-green-200">
+                <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  תאריכים
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  {user.volunteer_start_date && (
+                    <div>תאריך התחלת התנדבות: {new Date(user.volunteer_start_date).toLocaleDateString('he-IL')}</div>
+                  )}
+                  {user.last_report_date && (
+                    <div>דיווח אחרון: {new Date(user.last_report_date).toLocaleDateString('he-IL')}</div>
+                  )}
+                  {user.last_call_date && (
+                    <div>שיחה אחרונה: {new Date(user.last_call_date).toLocaleDateString('he-IL')}</div>
+                  )}
+                  {user.created_at && (
+                    <div>נוצר ב: {new Date(user.created_at).toLocaleDateString('he-IL')}</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Matches */}
