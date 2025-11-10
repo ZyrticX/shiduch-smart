@@ -70,42 +70,29 @@ Deno.serve(async (req) => {
           return null;
         };
 
-        // Name handling - support both "שם מלא" and "שם פרטי" + "שם משפחה"
-        // Try multiple variations including common Excel column names
-        const fullName = findColumn([
-          'שם מלא', 
-          'full_name', 
-          'name', 
-          'שם',
-          'שם מלא',
-          'שם מלא:',
-          'שם מלא ',
-          'שם מלא: ',
-          'שם מלא:שם מלא',
-          'שם מלא:שם פרטי',
-          'שם מלא:שם משפחה'
-        ]);
+        // Name handling - prioritize "שם מלא", then try "שם פרטי" + "שם משפחה"
+        // Try exact matches first, then variations
+        let fullName = findColumn(['שם מלא']);
+        if (!fullName) {
+          // Try with variations (spaces, colons, etc.)
+          fullName = findColumn([
+            'שם מלא', 
+            'full_name', 
+            'name', 
+            'שם',
+            'שם מלא:',
+            'שם מלא ',
+            'שם מלא: ',
+            'שם מלא:שם מלא'
+          ]);
+        }
+        
         if (fullName) {
           mapped.full_name = fullName;
         } else {
-          const firstName = findColumn([
-            'שם פרטי', 
-            'first_name', 
-            'firstName', 
-            'שם פרטי',
-            'שם פרטי:',
-            'שם פרטי ',
-            'שם פרטי:שם פרטי'
-          ]);
-          const lastName = findColumn([
-            'שם משפחה', 
-            'last_name', 
-            'lastName', 
-            'שם משפחה',
-            'שם משפחה:',
-            'שם משפחה ',
-            'שם משפחה:שם משפחה'
-          ]);
+          // Try combining first name + last name
+          const firstName = findColumn(['שם פרטי']);
+          const lastName = findColumn(['שם משפחה']);
           if (firstName || lastName) {
             mapped.full_name = `${firstName || ''} ${lastName || ''}`.trim();
           }
@@ -136,21 +123,21 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Phone handling - support "טלפון נייד" as well
-        const phone = findColumn([
-          'טלפון', 
-          'טלפון נייד', 
-          'phone', 
-          'phone_number', 
-          'tel', 
-          'mobile',
-          'טלפון:',
-          'טלפון נייד:',
-          'טלפון:טלפון נייד',
-          'טלפון נייד:טלפון נייד',
-          'טלפון נייד:טלפון',
-          'טלפון:טלפון'
-        ]);
+        // Phone handling - prioritize "טלפון נייד" (exact match from your Excel)
+        let phone = findColumn(['טלפון נייד']);
+        if (!phone) {
+          // Try other variations
+          phone = findColumn([
+            'טלפון', 
+            'phone', 
+            'phone_number', 
+            'tel', 
+            'mobile',
+            'טלפון:',
+            'טלפון נייד:',
+            'טלפון:טלפון נייד'
+          ]);
+        }
         if (phone) {
           mapped.phone = phone;
         }
@@ -160,14 +147,21 @@ Deno.serve(async (req) => {
           console.log('⚠️ WARNING: No phone found in first row. Available columns:', Object.keys(row));
         }
 
-        // City
-        const city = findColumn(['עיר', 'city', 'עיר מגורים']);
+        // City - prioritize "עיר מגורים" then "עיר" (both exist in your Excel)
+        let city = findColumn(['עיר מגורים']);
+        if (!city) {
+          city = findColumn(['עיר', 'city']);
+        }
         if (city) {
           mapped.city = city;
         }
 
-        // Native language - support "שפות" and "העדפת שפה" as well
-        const nativeLang = findColumn(['שפת אם', 'שפות', 'native_language', 'language', 'העדפת שפה', 'שפה']);
+        // Native language - prioritize "שפת אם" (exact match from your Excel)
+        let nativeLang = findColumn(['שפת אם']);
+        if (!nativeLang) {
+          // Try other variations
+          nativeLang = findColumn(['שפות', 'native_language', 'language', 'העדפת שפה', 'שפה']);
+        }
         if (nativeLang) {
           mapped.native_language = nativeLang;
         }
@@ -180,16 +174,19 @@ Deno.serve(async (req) => {
 
         // Table-specific fields
         if (table === 'students') {
-          // Special requests / Notes
-          const specialRequests = findColumn([
-            'בקשות מיוחדות', 
-            'special_requests', 
-            'הערות / בקשות מיוחדות', 
-            'בקשות מיוחדות בזמן בקשה לשיבוץ', 
-            'הערות',
-            'notes',
-            'remarks'
-          ]);
+          // Special requests / Notes - prioritize "הערות לסטטוס" from your Excel
+          let specialRequests = findColumn(['הערות לסטטוס']);
+          if (!specialRequests) {
+            specialRequests = findColumn([
+              'בקשות מיוחדות', 
+              'special_requests', 
+              'הערות / בקשות מיוחדות', 
+              'בקשות מיוחדות בזמן בקשה לשיבוץ', 
+              'הערות',
+              'notes',
+              'remarks'
+            ]);
+          }
           if (specialRequests) {
             mapped.special_requests = specialRequests;
           }
