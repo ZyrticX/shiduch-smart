@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Match {
   id: string;
@@ -30,6 +31,8 @@ const MatchesTable = () => {
   const [matches, setMatches] = useState<Match[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedMatches, setSelectedMatches] = useState<Set<string>>(new Set());
+  const [isProcessingBatch, setIsProcessingBatch] = useState(false);
 
   useEffect(() => {
     loadMatches();
@@ -117,9 +120,89 @@ const MatchesTable = () => {
 
       toast.success(data?.message || (action === 'approve' ? "ההתאמה אושרה בהצלחה" : "ההתאמה נדחתה"));
       loadMatches();
+      // Remove from selection after update
+      setSelectedMatches(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(matchId);
+        return newSet;
+      });
     } catch (error: any) {
       console.error("Error updating match:", error);
       toast.error("שגיאה בעדכון ההתאמה");
+    }
+  };
+
+  const toggleMatchSelection = (matchId: string) => {
+    setSelectedMatches(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(matchId)) {
+        newSet.delete(matchId);
+      } else {
+        newSet.add(matchId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllMatches = () => {
+    if (selectedMatches.size === filteredMatches.length) {
+      setSelectedMatches(new Set());
+    } else {
+      setSelectedMatches(new Set(filteredMatches.map(m => m.id)));
+    }
+  };
+
+  const handleBatchAction = async (action: 'approve' | 'reject') => {
+    if (selectedMatches.size === 0) {
+      toast.warning("אנא בחר לפחות התאמה אחת");
+      return;
+    }
+
+    setIsProcessingBatch(true);
+    const matchIds = Array.from(selectedMatches);
+    const actionText = action === 'approve' ? 'אישור' : 'דחייה';
+    
+    toast.info(`מעבד ${matchIds.length} התאמות...`);
+
+    try {
+      // Process matches in parallel batches
+      const batchSize = 10;
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < matchIds.length; i += batchSize) {
+        const batch = matchIds.slice(i, i + batchSize);
+        const promises = batch.map(matchId => 
+          supabase.functions.invoke('update-match-status', {
+            body: { matchId, action }
+          })
+        );
+
+        const results = await Promise.allSettled(promises);
+        
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled' && !result.value.error && !result.value.data?.error) {
+            successCount++;
+          } else {
+            errorCount++;
+            console.error(`Error processing match ${batch[index]}:`, result);
+          }
+        });
+      }
+
+      if (errorCount === 0) {
+        toast.success(`הושלם בהצלחה: ${successCount} התאמות ${action === 'approve' ? 'אושרו' : 'נדחו'}`);
+      } else {
+        toast.warning(`הושלם חלקית: ${successCount} הצליחו, ${errorCount} נכשלו`);
+      }
+
+      setSelectedMatches(new Set());
+      loadMatches();
+    } catch (error: any) {
+      console.error("Error in batch action:", error);
+      toast.error(`שגיאה ב${actionText} קבוצתי`);
+    } finally {
+      setIsProcessingBatch(false);
     }
   };
 
@@ -151,18 +234,58 @@ const MatchesTable = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 justify-end">
-        <Input
-          placeholder="חיפוש לפי שם, עיר..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full sm:max-w-sm text-right"
-        />
-        <Button variant="outline" className="gap-2 w-full sm:w-auto">
-          <FileDown className="h-4 w-4" />
-          <span className="hidden sm:inline">ייצא CSV</span>
-          <span className="sm:hidden">CSV</span>
-        </Button>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 justify-between">
+        <div className="flex items-center gap-2">
+          {filteredMatches.length > 0 && (
+            <>
+              <Checkbox
+                checked={selectedMatches.size === filteredMatches.length && filteredMatches.length > 0}
+                onCheckedChange={toggleAllMatches}
+                className="h-4 w-4"
+              />
+              <span className="text-sm text-muted-foreground">
+                בחר הכל ({selectedMatches.size}/{filteredMatches.length})
+              </span>
+              {selectedMatches.size > 0 && (
+                <div className="flex gap-2 mr-4">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => handleBatchAction('approve')}
+                    disabled={isProcessingBatch}
+                    className="gap-1"
+                  >
+                    <Check className="h-3 w-3" />
+                    אשר נבחרים ({selectedMatches.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => handleBatchAction('reject')}
+                    disabled={isProcessingBatch}
+                    className="gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    דחה נבחרים ({selectedMatches.size})
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+          <Input
+            placeholder="חיפוש לפי שם, עיר..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full sm:max-w-sm text-right"
+          />
+          <Button variant="outline" className="gap-2 w-full sm:w-auto">
+            <FileDown className="h-4 w-4" />
+            <span className="hidden sm:inline">ייצא CSV</span>
+            <span className="sm:hidden">CSV</span>
+          </Button>
+        </div>
       </div>
 
       {filteredMatches.length === 0 ? (
@@ -175,6 +298,13 @@ const MatchesTable = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={selectedMatches.size === filteredMatches.length && filteredMatches.length > 0}
+                    onCheckedChange={toggleAllMatches}
+                    className="h-4 w-4"
+                  />
+                </TableHead>
                 <TableHead className="text-right whitespace-nowrap">סטודנט</TableHead>
                 <TableHead className="text-right whitespace-nowrap">משתמש</TableHead>
                 <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">עיר</TableHead>
@@ -185,7 +315,14 @@ const MatchesTable = () => {
             </TableHeader>
             <TableBody>
               {filteredMatches.map((match) => (
-                <TableRow key={match.id} className="hover:bg-muted/50">
+                <TableRow key={match.id} className={`hover:bg-muted/50 ${selectedMatches.has(match.id) ? 'bg-blue-50 dark:bg-blue-950/20' : ''}`}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedMatches.has(match.id)}
+                      onCheckedChange={() => toggleMatchSelection(match.id)}
+                      className="h-4 w-4"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">
                     {match.students?.full_name || "N/A"}
                   </TableCell>

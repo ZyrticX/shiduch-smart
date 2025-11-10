@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, UserCheck, Clock, Sparkles, FileCheck, GraduationCap, Heart, BarChart3, Settings } from "lucide-react";
+import { Users, UserCheck, Clock, FileCheck, GraduationCap, Heart, BarChart3, Settings } from "lucide-react";
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
@@ -18,8 +18,6 @@ const Index = () => {
     suggestedMatches: 0,
     approvedMatches: 0,
   });
-  const [isMatching, setIsMatching] = useState(false);
-
   useEffect(() => {
     loadStats();
     
@@ -52,31 +50,6 @@ const Index = () => {
     });
   };
 
-  const runMatchingAlgorithm = async () => {
-    setIsMatching(true);
-    toast.info("מריץ אלגוריתם התאמה חכם...");
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-matches', {
-        body: { minScore: 60, limit: 100 }
-      });
-
-      if (error) throw error;
-
-      if (data?.suggestedCount > 0) {
-        toast.success(`✨ ${data.message}`);
-        loadStats();
-      } else {
-        toast.info(data?.message || "לא נמצאו התאמות חדשות");
-      }
-    } catch (error: any) {
-      console.error("Error running matching algorithm:", error);
-      toast.error("שגיאה בהפעלת מנגנון ההתאמה");
-    } finally {
-      setIsMatching(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-secondary/30" dir="rtl">
       <div className="container mx-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-6">
@@ -91,16 +64,6 @@ const Index = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            <Button 
-              onClick={runMatchingAlgorithm}
-              disabled={isMatching}
-              size="lg"
-              className="gap-2 flex-1 sm:flex-initial text-sm sm:text-base"
-            >
-              <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="hidden sm:inline">הפעל התאמה חכמה</span>
-              <span className="sm:hidden">התאמה</span>
-            </Button>
             <Button 
               onClick={() => navigate('/matching')}
               variant="outline"
