@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, UserCheck, Clock, FileCheck, GraduationCap, Heart, BarChart3, Settings } from "lucide-react";
+import { Users, UserCheck, Clock, FileCheck, GraduationCap, Heart, BarChart3, Settings, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import MatchesTable from "@/components/MatchesTable";
 import StatsCard from "@/components/StatsCard";
