@@ -45,8 +45,17 @@ Deno.serve(async (req) => {
         console.log('First row sample data:', JSON.stringify(rows[0], null, 2));
       }
 
+      // Filter out completely empty rows first
+      const nonEmptyRows = rows.filter((row: any) => {
+        // Check if row has any non-empty values
+        const values = Object.values(row);
+        return values.some((val: any) => val !== null && val !== undefined && String(val).trim() !== '');
+      });
+      
+      console.log(`Filtered ${rows.length - nonEmptyRows.length} empty rows. Processing ${nonEmptyRows.length} rows with data.`);
+
       // Map Excel columns to database columns
-      const mappedRows = rows.map((row: any, rowIndex: number) => {
+      const mappedRows = nonEmptyRows.map((row: any, rowIndex: number) => {
         const mapped: any = {};
 
         // Helper function to find column value by multiple possible names (case-insensitive)
@@ -236,26 +245,41 @@ Deno.serve(async (req) => {
         return mapped;
       });
 
-      // Process ALL rows - don't filter anything! Generate missing required fields instead
+      // Process rows - skip rows that are completely empty (marked with X or empty)
       // Email is required by DB but not by user - we'll auto-generate it for every row
-      const validRows = mappedRows.map((row: any, index: number) => {
-        // Ensure all values are strings where needed
-        if (row.full_name) row.full_name = String(row.full_name).trim();
-        if (row.city) row.city = String(row.city).trim();
-        if (row.native_language) row.native_language = String(row.native_language).trim();
-        
-        // Generate missing required fields with defaults instead of filtering
-        if (!row.full_name || row.full_name.trim() === '') {
-          row.full_name = `לא צוין_${index}`;
-        }
-        
-        if (!row.city || row.city.trim() === '') {
-          row.city = 'לא צוין';
-        }
-        
-        if (!row.native_language || row.native_language.trim() === '') {
-          row.native_language = 'לא צוין';
-        }
+      const validRows = mappedRows
+        .map((row: any, index: number) => {
+          // Skip rows marked with 'X' or completely empty
+          const hasName = row.full_name && String(row.full_name).trim() !== '' && String(row.full_name).trim().toUpperCase() !== 'X';
+          const hasPhone = row.phone && String(row.phone).trim() !== '' && String(row.phone).trim().toUpperCase() !== 'X';
+          const hasCity = row.city && String(row.city).trim() !== '' && String(row.city).trim().toUpperCase() !== 'X';
+          
+          // If row is completely empty or marked with X, skip it
+          if (!hasName && !hasPhone && !hasCity) {
+            return null; // Mark for filtering
+          }
+          
+          // Ensure all values are strings where needed
+          if (row.full_name) row.full_name = String(row.full_name).trim();
+          if (row.city) row.city = String(row.city).trim();
+          if (row.native_language) row.native_language = String(row.native_language).trim();
+          
+          // Generate missing required fields with defaults instead of filtering
+          if (!row.full_name || row.full_name.trim() === '' || row.full_name.trim().toUpperCase() === 'X') {
+            row.full_name = `לא צוין_${index}`;
+          }
+          
+          if (!row.city || row.city.trim() === '' || row.city.trim().toUpperCase() === 'X') {
+            row.city = 'לא צוין';
+          }
+          
+          if (!row.native_language || row.native_language.trim() === '' || row.native_language.trim().toUpperCase() === 'X') {
+            row.native_language = 'לא צוין';
+          }
+          
+          return row;
+        })
+        .filter((row: any) => row !== null); // Remove null rows (skipped empty rows)
         
         // ALWAYS generate unique email - required by DB but not displayed to user
         // Use row index + timestamp + random to ensure uniqueness across all rows
@@ -291,8 +315,12 @@ Deno.serve(async (req) => {
         return row;
       });
       
-      // Don't filter - process all rows! All rows are valid
-      console.log(`Processing ALL ${validRows.length} rows from ${mappedRows.length} mapped rows (no filtering)`);
+      // Filtered out empty rows marked with X
+      const skippedRows = mappedRows.length - validRows.length;
+      if (skippedRows > 0) {
+        console.log(`⚠️ Skipped ${skippedRows} empty rows (marked with X or completely empty)`);
+      }
+      console.log(`Processing ${validRows.length} valid rows from ${mappedRows.length} mapped rows`);
 
       // Check if there are any rows at all
       if (validRows.length === 0) {
