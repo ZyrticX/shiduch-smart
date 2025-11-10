@@ -79,31 +79,22 @@ Deno.serve(async (req) => {
           return null;
         };
 
-        // Name handling - prioritize "שם מלא", then try "שם פרטי" + "שם משפחה"
-        // Try exact matches first, then variations
-        let fullName = findColumn(['שם מלא']);
-        if (!fullName) {
-          // Try with variations (spaces, colons, etc.)
-          fullName = findColumn([
-            'שם מלא', 
-            'full_name', 
-            'name', 
-            'שם',
-            'שם מלא:',
-            'שם מלא ',
-            'שם מלא: ',
-            'שם מלא:שם מלא'
-          ]);
-        }
+        // Name handling - prioritize combining "שם פרטי" + "שם משפחה" (from your Excel)
+        // Then try "שם מלא" if exists
+        const firstName = findColumn(['שם פרטי']);
+        const lastName = findColumn(['שם משפחה']);
         
-        if (fullName) {
-          mapped.full_name = fullName;
+        if (firstName || lastName) {
+          // Combine first name + last name
+          mapped.full_name = `${firstName || ''} ${lastName || ''}`.trim();
         } else {
-          // Try combining first name + last name
-          const firstName = findColumn(['שם פרטי']);
-          const lastName = findColumn(['שם משפחה']);
-          if (firstName || lastName) {
-            mapped.full_name = `${firstName || ''} ${lastName || ''}`.trim();
+          // Fallback to "שם מלא" if exists
+          let fullName = findColumn(['שם מלא']);
+          if (!fullName) {
+            fullName = findColumn(['full_name', 'name', 'שם']);
+          }
+          if (fullName) {
+            mapped.full_name = fullName;
           }
         }
         
@@ -141,14 +132,12 @@ Deno.serve(async (req) => {
             'phone', 
             'phone_number', 
             'tel', 
-            'mobile',
-            'טלפון:',
-            'טלפון נייד:',
-            'טלפון:טלפון נייד'
+            'mobile'
           ]);
         }
         if (phone) {
-          mapped.phone = phone;
+          // Clean phone number - remove spaces, dashes, etc.
+          mapped.phone = String(phone).replace(/\s+/g, '').replace(/-/g, '');
         }
         
         // Log if phone is missing for debugging
@@ -183,14 +172,18 @@ Deno.serve(async (req) => {
 
         // Table-specific fields
         if (table === 'students') {
-          // Special requests / Notes - prioritize "הערות לסטטוס" from your Excel
-          let specialRequests = findColumn(['הערות לסטטוס']);
+          // Special requests / Notes - prioritize "בקשות מיוחדות בזמן בקשה לשיבוץ" from your Excel
+          let specialRequests = findColumn(['בקשות מיוחדות בזמן בקשה לשיבוץ']);
           if (!specialRequests) {
+            // Then try "הערות לסטטוס"
+            specialRequests = findColumn(['הערות לסטטוס']);
+          }
+          if (!specialRequests) {
+            // Fallback to other variations
             specialRequests = findColumn([
               'בקשות מיוחדות', 
               'special_requests', 
               'הערות / בקשות מיוחדות', 
-              'בקשות מיוחדות בזמן בקשה לשיבוץ', 
               'הערות',
               'notes',
               'remarks'
