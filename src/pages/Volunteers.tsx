@@ -370,7 +370,6 @@ export default function Users() {
                     />
                   </TableHead>
                   <TableHead className="text-right whitespace-nowrap">שם מלא</TableHead>
-                  <TableHead className="text-right whitespace-nowrap hidden sm:table-cell">אימייל</TableHead>
                   <TableHead className="text-right whitespace-nowrap hidden md:table-cell">טלפון</TableHead>
                   <TableHead className="text-right whitespace-nowrap">עיר</TableHead>
                   <TableHead className="text-right whitespace-nowrap hidden lg:table-cell">שפת אם</TableHead>
@@ -383,13 +382,13 @@ export default function Users() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       טוען...
                     </TableCell>
                   </TableRow>
                 ) : filteredUsers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       לא נמצאו משתמשים
                     </TableCell>
                   </TableRow>
@@ -410,7 +409,6 @@ export default function Users() {
                           {user.full_name}
                         </button>
                       </TableCell>
-                      <TableCell className="hidden sm:table-cell">{user.email}</TableCell>
                       <TableCell className="hidden md:table-cell">{user.phone || "-"}</TableCell>
                       <TableCell>{user.city}</TableCell>
                       <TableCell className="hidden lg:table-cell">{user.native_language}</TableCell>
