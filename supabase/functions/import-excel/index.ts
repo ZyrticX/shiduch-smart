@@ -547,19 +547,28 @@ Deno.serve(async (req) => {
         const phonesToCheck = uniqueRowsInFile.map(r => r.phone).filter(Boolean);
         const contactIdsToCheck = uniqueRowsInFile.map(r => r.contact_id).filter(Boolean);
         
+        // Also check by name+city for rows without phone/contact_id
+        const nameCityPairs = uniqueRowsInFile
+          .filter(r => !r.phone && !r.contact_id)
+          .map(r => ({ name: r.full_name, city: r.city }));
+        
         // Load existing records from database
         let existingRecords = new Set<string>();
+        let existingNameCity = new Set<string>();
         
         if (phonesToCheck.length > 0) {
           const { data: existingByPhone, error: phoneError } = await supabaseClient
             .from(table)
-            .select('phone, contact_id')
+            .select('phone, contact_id, full_name, city')
             .in('phone', phonesToCheck);
           
           if (!phoneError && existingByPhone) {
             existingByPhone.forEach((r: any) => {
               if (r.phone) existingRecords.add(`phone:${r.phone}`);
               if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
+              if (r.full_name && r.city) {
+                existingNameCity.add(`${r.full_name.trim().toLowerCase()}_${r.city.trim().toLowerCase()}`);
+              }
             });
           }
         }
@@ -567,18 +576,45 @@ Deno.serve(async (req) => {
         if (contactIdsToCheck.length > 0) {
           const { data: existingByContactId, error: contactError } = await supabaseClient
             .from(table)
-            .select('phone, contact_id')
+            .select('phone, contact_id, full_name, city')
             .in('contact_id', contactIdsToCheck);
           
           if (!contactError && existingByContactId) {
             existingByContactId.forEach((r: any) => {
               if (r.phone) existingRecords.add(`phone:${r.phone}`);
               if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
+              if (r.full_name && r.city) {
+                existingNameCity.add(`${r.full_name.trim().toLowerCase()}_${r.city.trim().toLowerCase()}`);
+              }
             });
           }
         }
         
-        console.log(`Found ${existingRecords.size} existing records in database`);
+        // Check by name+city for rows without phone/contact_id
+        if (nameCityPairs.length > 0) {
+          const uniqueNames = [...new Set(nameCityPairs.map(p => p.name))];
+          const uniqueCities = [...new Set(nameCityPairs.map(p => p.city))];
+          
+          const { data: existingByNameCity, error: nameCityError } = await supabaseClient
+            .from(table)
+            .select('full_name, city, phone, contact_id')
+            .in('full_name', uniqueNames)
+            .in('city', uniqueCities);
+          
+          if (!nameCityError && existingByNameCity) {
+            existingByNameCity.forEach((r: any) => {
+              if (r.full_name && r.city) {
+                const key = `${r.full_name.trim().toLowerCase()}_${r.city.trim().toLowerCase()}`;
+                existingNameCity.add(key);
+              }
+              // Also add phone/contact_id if found
+              if (r.phone) existingRecords.add(`phone:${r.phone}`);
+              if (r.contact_id) existingRecords.add(`contact_id:${r.contact_id}`);
+            });
+          }
+        }
+        
+        console.log(`Found ${existingRecords.size} existing records by phone/contact_id, ${existingNameCity.size} by name+city`);
 
         // Step 3: Filter out rows that already exist in database
         const newRows: any[] = [];
@@ -592,12 +628,19 @@ Deno.serve(async (req) => {
           const existsByPhone = phone && existingRecords.has(`phone:${phone}`);
           const existsByContactId = contactId && existingRecords.has(`contact_id:${contactId}`);
           
-          if (existsByPhone || existsByContactId) {
+          // Also check by name+city if no phone/contact_id
+          let existsByNameCity = false;
+          if (!phone && !contactId && row.full_name && row.city) {
+            const nameCityKey = `${row.full_name.trim().toLowerCase()}_${row.city.trim().toLowerCase()}`;
+            existsByNameCity = existingNameCity.has(nameCityKey);
+          }
+          
+          if (existsByPhone || existsByContactId || existsByNameCity) {
             dbDuplicates.push({ 
               name: row.full_name, 
-              phone: phone || contactId || 'ללא מזהה' 
+              phone: phone || contactId || (existsByNameCity ? `${row.full_name} - ${row.city}` : 'ללא מזהה')
             });
-            console.log(`Skipping duplicate: ${row.full_name} (phone: ${phone}, contact_id: ${contactId})`);
+            console.log(`Skipping duplicate: ${row.full_name} (phone: ${phone}, contact_id: ${contactId}, name+city: ${existsByNameCity})`);
           } else {
             newRows.push(row);
           }
