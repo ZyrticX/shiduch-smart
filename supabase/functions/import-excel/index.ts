@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       }
 
       // Map Excel columns to database columns
-      const mappedRows = rows.map((row: any) => {
+      const mappedRows = rows.map((row: any, rowIndex: number) => {
         const mapped: any = {};
 
         // Helper function to find column value by multiple possible names (case-insensitive)
@@ -93,8 +93,10 @@ Deno.serve(async (req) => {
               mapped.email = contactId;
             } else {
               mapped.phone = contactId;
-              // Generate email from contact ID if it's a phone number
-              mapped.email = `contact_${contactId.replace(/\D/g, '')}@imported.local`;
+              // Generate UNIQUE email from contact ID + row index to avoid duplicates
+              const timestamp = Date.now();
+              const random = Math.floor(Math.random() * 100000);
+              mapped.email = `contact_${contactId.replace(/\D/g, '')}_row${rowIndex}_${timestamp}_${random}@imported.local`;
             }
           }
         }
