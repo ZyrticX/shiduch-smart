@@ -210,9 +210,9 @@ serve(async (req) => {
 
     // Generate matches
     const matches = [];
-    const usedStudents = new Set<string>();
     const userCapacity = new Map<string, number>();
     const userSuggestedMatches = new Map<string, number>(); // Track suggested matches per user
+    const studentSuggestedMatches = new Map<string, number>(); // Track suggested matches per student
 
     // Initialize user capacity tracking
     availableUsers.forEach((u: User) => {
@@ -220,16 +220,26 @@ serve(async (req) => {
       userSuggestedMatches.set(u.id, 0); // Initialize suggested matches counter
     });
 
-    // Count existing suggested matches per user
+    // Initialize student suggested matches counter
+    students.forEach((s: Student) => {
+      studentSuggestedMatches.set(s.id, 0);
+    });
+
+    // Count existing suggested matches per user and per student
     const { data: existingSuggestedMatches } = await supabaseClient
       .from("matches")
-      .select("user_id")
+      .select("user_id, student_id")
       .eq("status", "Suggested");
 
     if (existingSuggestedMatches) {
       existingSuggestedMatches.forEach((match: any) => {
-        const currentCount = userSuggestedMatches.get(match.user_id) || 0;
-        userSuggestedMatches.set(match.user_id, currentCount + 1);
+        // Count for user
+        const userCount = userSuggestedMatches.get(match.user_id) || 0;
+        userSuggestedMatches.set(match.user_id, userCount + 1);
+        
+        // Count for student
+        const studentCount = studentSuggestedMatches.get(match.student_id) || 0;
+        studentSuggestedMatches.set(match.student_id, studentCount + 1);
       });
     }
 
@@ -296,6 +306,16 @@ serve(async (req) => {
           continue;
         }
 
+        // Additional quality checks for better precision:
+        // 1. Require at least language match OR same city for high-quality matches
+        const hasLanguageMatch = student.native_language === user.native_language;
+        const hasSameCity = distance === 0;
+        
+        // If score is below 70, require at least language match OR same city
+        if (score < 70 && !hasLanguageMatch && !hasSameCity) {
+          continue; // Skip low-quality matches without key criteria
+        }
+
         possibleMatches.push({
           student_id: student.id,
           user_id: user.id,
@@ -312,24 +332,28 @@ serve(async (req) => {
     console.log(`Generated ${possibleMatches.length} possible matches`);
 
     // Greedy allocation - assign best matches first
-    // Limit: max 5 suggested matches per user (to prevent spam)
+    // Limits: 
+    // - max 3 suggested matches per student (to ensure quality)
+    // - max 5 suggested matches per user (to prevent spam)
+    const MAX_SUGGESTED_MATCHES_PER_STUDENT = 3;
     const MAX_SUGGESTED_MATCHES_PER_USER = 5;
 
     for (const match of possibleMatches) {
-      // Skip if student already matched
-      if (usedStudents.has(match.student_id)) {
-        continue;
-      }
-
       // Check user capacity (for approved matches)
       const capacity = userCapacity.get(match.user_id) || 0;
       if (capacity <= 0) {
         continue;
       }
 
+      // Check how many suggested matches this student already has
+      const currentStudentSuggestedCount = studentSuggestedMatches.get(match.student_id) || 0;
+      if (currentStudentSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_STUDENT) {
+        continue; // Skip - student already has enough suggested matches
+      }
+
       // Check how many suggested matches this user already has
-      const currentSuggestedCount = userSuggestedMatches.get(match.user_id) || 0;
-      if (currentSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_USER) {
+      const currentUserSuggestedCount = userSuggestedMatches.get(match.user_id) || 0;
+      if (currentUserSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_USER) {
         continue; // Skip - user already has enough suggested matches
       }
 
@@ -350,9 +374,9 @@ serve(async (req) => {
           status: "Suggested", // Use Suggested status
         });
 
-        usedStudents.add(match.student_id);
-        // Update suggested matches counter for this user
-        userSuggestedMatches.set(match.user_id, currentSuggestedCount + 1);
+        // Update suggested matches counters
+        studentSuggestedMatches.set(match.student_id, currentStudentSuggestedCount + 1);
+        userSuggestedMatches.set(match.user_id, currentUserSuggestedCount + 1);
 
         // Stop if we reached the limit
         if (matches.length >= finalLimit) {
