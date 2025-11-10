@@ -222,6 +222,12 @@ serve(async (req) => {
     const possibleMatches = [];
     for (const student of students as Student[]) {
       for (const user of availableUsers as User[]) {
+        // CRITICAL: Prevent matching the same ID (student ID should never equal user ID)
+        if (student.id === user.id) {
+          console.warn(`WARNING: Skipping match attempt - same ID detected: ${student.id}`);
+          continue;
+        }
+        
         // Calculate distance
         let distance = 0;
         let hasCoordinates = false;
@@ -343,6 +349,33 @@ serve(async (req) => {
         throw insertError;
       }
     }
+
+    // Log scan to history
+    const scanRecord = {
+      scan_type: reqMinScore || reqLimit ? 'manual' : 'automatic',
+      parameters: {
+        minScore: finalMinScore,
+        limit: finalLimit,
+        nearbyCityDistanceKm,
+        languageMatchPoints,
+        sameCityPoints,
+        nearbyCityPoints,
+        genderMatchPoints,
+        specialRequestsPoints,
+      },
+      results: {
+        suggestedCount: matches.length,
+        studentsScanned: students.length,
+        usersAvailable: availableUsers.length,
+        possibleMatchesFound: possibleMatches.length,
+      },
+      created_by: 'system',
+    };
+
+    await supabaseClient.from("scan_history").insert(scanRecord).catch((err) => {
+      console.error("Error logging scan history:", err);
+      // Don't fail the request if logging fails
+    });
 
     return new Response(
       JSON.stringify({
