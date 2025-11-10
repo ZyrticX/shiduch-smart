@@ -32,6 +32,7 @@ Deno.serve(async (req) => {
 
     let totalUpserted = 0;
     const errors: string[] = [];
+    const duplicates: { name: string; phone: string }[] = [];
 
     for (const tableData of requestData) {
       const { table, rows, sheetName } = tableData;
@@ -522,22 +523,26 @@ Deno.serve(async (req) => {
       console.log(`✅ Processing ALL ${validRows.length} rows - no filtering, all will be imported`);
 
       if (validRows.length > 0) {
-        // Remove duplicates by email before upserting to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        // Deduplicate rows by phone before upserting to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
         const uniqueRowsMap = new Map<string, any>();
+        const tableDuplicates: { name: string; phone: string }[] = [];
+
         for (const row of validRows) {
-          const email = row.email;
-          // Keep the last occurrence of each email (or first - doesn't matter, just need unique)
-          if (!uniqueRowsMap.has(email)) {
-            uniqueRowsMap.set(email, row);
+          const phone = row.phone;
+          if (phone && uniqueRowsMap.has(phone)) {
+            tableDuplicates.push({ name: row.full_name, phone: phone });
           } else {
-            console.log(`Duplicate email found: ${email}, keeping first occurrence`);
+            uniqueRowsMap.set(phone, row);
           }
         }
-        const uniqueRows = Array.from(uniqueRowsMap.values());
         
+        // Add table duplicates to global duplicates array
+        duplicates.push(...tableDuplicates);
+        const uniqueRows = Array.from(uniqueRowsMap.values());
+
         console.log(`After deduplication: ${uniqueRows.length} unique rows out of ${validRows.length} total rows`);
 
-        // Use upsert based on email (unique constraint)
+        // Use upsert based on phone (unique constraint)
         // Process in smaller batches to avoid timeout issues
         const batchSize = 100;
         let totalUpsertedForTable = 0;
@@ -549,7 +554,7 @@ Deno.serve(async (req) => {
           const { data: upsertedData, error: upsertError } = await supabaseClient
             .from(table)
             .upsert(batch, {
-              onConflict: 'email',
+              onConflict: 'phone', // Use phone for conflict resolution
               ignoreDuplicates: false
             })
             .select();
@@ -577,10 +582,11 @@ Deno.serve(async (req) => {
           ? `הועלו ${totalUpserted} רשומות. ${errors.length} שגיאות: ${errors.join('; ')}`
           : `Successfully imported ${totalUpserted} records`,
         errors: errors.length > 0 ? errors : undefined,
+        duplicates: duplicates.length > 0 ? duplicates : undefined, // Return duplicates
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: errors.length > 0 ? 207 : 200, // 207 Multi-Status
+        status: errors.length > 0 || duplicates.length > 0 ? 207 : 200, // 207 Multi-Status
       }
     );
   } catch (error) {
