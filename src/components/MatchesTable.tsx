@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, X, Edit, FileDown, Eye, User, MapPin, Languages, Phone, Mail, Calendar, Building } from "lucide-react";
+import { Check, X, Edit, FileDown, Eye, User, MapPin, Languages, Phone, Mail, Calendar, Building, AlertTriangle, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import {
   Table,
@@ -24,6 +24,11 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface StudentDetails {
   id: string;
@@ -68,7 +73,7 @@ interface Match {
   confidence_score: number;
   match_reason: string;
   status: string;
-  students: { full_name: string; city: string } | null;
+  students: { full_name: string; city: string; special_requests: string | null } | null;
   users: { full_name: string; city: string } | null;
 }
 
@@ -125,7 +130,7 @@ const MatchesTable = () => {
       // Load students and users separately
       const [studentsRes, usersRes] = await Promise.all([
         studentIds.length > 0 
-          ? supabase.from('students').select('id, full_name, city').in('id', studentIds)
+          ? supabase.from('students').select('id, full_name, city, special_requests').in('id', studentIds)
           : Promise.resolve({ data: [], error: null }),
         userIds.length > 0
           ? supabase.from('users').select('id, full_name, city').in('id', userIds)
@@ -136,7 +141,7 @@ const MatchesTable = () => {
       if (usersRes.error) throw usersRes.error;
 
       // Create lookup maps
-      const studentsMap = new Map((studentsRes.data || []).map(s => [s.id, { full_name: s.full_name, city: s.city }]));
+      const studentsMap = new Map((studentsRes.data || []).map(s => [s.id, { full_name: s.full_name, city: s.city, special_requests: s.special_requests }]));
       const usersMap = new Map((usersRes.data || []).map(u => [u.id, { full_name: u.full_name, city: u.city }]));
 
       // Combine matches with student and user data
@@ -470,12 +475,68 @@ const MatchesTable = () => {
                     </div>
                   </TableCell>
                   <TableCell className="max-w-xs hidden lg:table-cell">
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {match.match_reason || "אין נימוק"}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {match.match_reason || "אין נימוק"}
+                      </p>
+                      {/* Special Requests Button */}
+                      {match.students?.special_requests && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-6 text-xs gap-1 bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-800"
+                            >
+                              <MessageSquare className="h-3 w-3" />
+                              בקשות מיוחדות
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80" dir="rtl">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                                <h4 className="font-semibold text-sm">בקשות מיוחדות של {match.students?.full_name}</h4>
+                              </div>
+                              <Separator />
+                              <p className="text-sm whitespace-pre-wrap">
+                                {match.students.special_requests}
+                              </p>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-1 sm:gap-2 flex-wrap">
+                      {/* Special Requests Indicator - visible on mobile */}
+                      {match.students?.special_requests && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-7 w-7 p-0 lg:hidden bg-yellow-50 hover:bg-yellow-100 border-yellow-300"
+                              title="בקשות מיוחדות"
+                            >
+                              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80" dir="rtl">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                                <h4 className="font-semibold text-sm">בקשות מיוחדות של {match.students?.full_name}</h4>
+                              </div>
+                              <Separator />
+                              <p className="text-sm whitespace-pre-wrap">
+                                {match.students.special_requests}
+                              </p>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
                       <Button
                         size="sm"
                         variant="default"
