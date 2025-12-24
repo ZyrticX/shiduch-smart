@@ -24,11 +24,15 @@ Deno.serve(async (req) => {
   try {
     console.log("🔧 Initializing function...");
 
-    // Hardcoded for now to fix environment issues
-    const supabaseUrl = "https://otryosdpmcyojffljkcb.supabase.co";
-    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im90cnVvc2RwbWN5b2pmZmxqa2NiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczMzY0NTM0NSwiZXhwIjoyMDQ5MjIxMzQ1fQ.4Y8J9nLrMqKsPwRtVxFgHjXaBcDeMnOpTuVwI";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-    console.log("🔧 Using hardcoded Supabase credentials");
+    if (!supabaseUrl || !supabaseKey) {
+      console.error("❌ Missing Supabase environment variables");
+      throw new Error("Missing Supabase environment variables");
+    }
+
+    console.log("🔧 Using Supabase credentials from environment");
 
     const supabaseClient = createClient(supabaseUrl, supabaseKey);
 

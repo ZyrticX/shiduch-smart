@@ -173,33 +173,47 @@ serve(async (req) => {
       throw studentsError;
     }
 
-    // Load active users with available capacity and active scholarship
+    // Load active users
     const { data: users, error: usersError } = await supabaseClient
       .from("users")
       .select("*")
-      .eq("is_active", true)
-      .eq("scholarship_active", true);
+      .eq("is_active", true);
 
     if (usersError) {
       console.error("Error loading users:", usersError);
       throw usersError;
     }
 
-    // Filter users with available capacity
-    const availableUsers = users.filter(
-      (u: User) => u.current_students < u.capacity_max
-    );
+    console.log(`DEBUG: Found ${students.length} unmatched students in database`);
+    console.log(`DEBUG: Found ${users.length} active users in database`);
 
-    console.log(`Found ${students.length} unmatched students`);
-    console.log(`Found ${availableUsers.length} available users`);
+    // Filter users with available capacity and scholarship active (if required)
+    const availableUsers = users.filter((u: User) => {
+      const hasCapacity = u.current_students < u.capacity_max;
+      const hasScholarship = u.scholarship_active !== false; // Only exclude if explicitly false
+      return hasCapacity && hasScholarship;
+    });
+
+    console.log(`DEBUG: Available users after filtering (capacity & scholarship): ${availableUsers.length}`);
+    
+    if (users.length > 0 && availableUsers.length === 0) {
+      const usersWithNoCapacity = users.filter(u => u.current_students >= u.capacity_max).length;
+      const usersWithNoScholarship = users.filter(u => u.scholarship_active === false).length;
+      console.log(`DEBUG: Reasons for 0 available users: ${usersWithNoCapacity} full capacity, ${usersWithNoScholarship} inactive scholarship`);
+    }
 
     if (students.length === 0 || availableUsers.length === 0) {
       return new Response(
         JSON.stringify({ 
           suggestedCount: 0,
           message: students.length === 0 
-            ? "אין סטודנטים ממתינים" 
-            : "אין משתמשים זמינים"
+            ? "אין סטודנטים ממתינים (כולם כבר משובצים או שאין נתונים)" 
+            : `אין משתמשים זמינים (נמצאו ${users.length} משתמשים אך אף אחד לא עומד בתנאי הקיבולת והמלגה)`,
+          debug: {
+            studentsCount: students.length,
+            usersCount: users.length,
+            availableUsersCount: availableUsers.length
+          }
         }),
         {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -245,6 +259,10 @@ serve(async (req) => {
 
     // Calculate all possible matches
     const possibleMatches = [];
+    let skippedByScore = 0;
+    let skippedByDistance = 0;
+    let skippedByQuality = 0;
+
     for (const student of students as Student[]) {
       for (const user of availableUsers as User[]) {
         // CRITICAL: Prevent matching the same ID (student ID should never equal user ID)
@@ -265,14 +283,15 @@ serve(async (req) => {
         ) {
           hasCoordinates = true;
           distance = calculateDistance(
-            student.latitude,
-            student.longitude,
-            user.latitude,
-            user.longitude
+            Number(student.latitude),
+            Number(student.longitude),
+            Number(user.latitude),
+            Number(user.longitude)
           );
           
           // Skip if distance exceeds configured limit
           if (distance > nearbyCityDistanceKm) {
+            skippedByDistance++;
             continue;
           }
         } else {
@@ -303,6 +322,7 @@ serve(async (req) => {
 
         // Skip if below minimum score
         if (score < finalMinScore) {
+          skippedByScore++;
           continue;
         }
 
@@ -313,6 +333,7 @@ serve(async (req) => {
         
         // If score is below 70, require at least language match OR same city
         if (score < 70 && !hasLanguageMatch && !hasSameCity) {
+          skippedByQuality++;
           continue; // Skip low-quality matches without key criteria
         }
 
@@ -326,6 +347,11 @@ serve(async (req) => {
       }
     }
 
+    console.log(`DEBUG: Total pairs checked: ${students.length * availableUsers.length}`);
+    console.log(`DEBUG: Skipped by score (<${finalMinScore}): ${skippedByScore}`);
+    console.log(`DEBUG: Skipped by distance (>${nearbyCityDistanceKm}km): ${skippedByDistance}`);
+    console.log(`DEBUG: Skipped by quality (score<70 & no lang/city match): ${skippedByQuality}`);
+
     // Sort by score (highest first)
     possibleMatches.sort((a, b) => b.score - a.score);
 
@@ -338,6 +364,10 @@ serve(async (req) => {
     const MAX_SUGGESTED_MATCHES_PER_STUDENT = 3;
     const MAX_SUGGESTED_MATCHES_PER_USER = 5;
 
+    let skippedByStudentLimit = 0;
+    let skippedByUserLimit = 0;
+    let skippedByExistingMatch = 0;
+
     for (const match of possibleMatches) {
       // Check user capacity (for approved matches)
       const capacity = userCapacity.get(match.user_id) || 0;
@@ -348,12 +378,14 @@ serve(async (req) => {
       // Check how many suggested matches this student already has
       const currentStudentSuggestedCount = studentSuggestedMatches.get(match.student_id) || 0;
       if (currentStudentSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_STUDENT) {
+        skippedByStudentLimit++;
         continue; // Skip - student already has enough suggested matches
       }
 
       // Check how many suggested matches this user already has
       const currentUserSuggestedCount = userSuggestedMatches.get(match.user_id) || 0;
       if (currentUserSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_USER) {
+        skippedByUserLimit++;
         continue; // Skip - user already has enough suggested matches
       }
 
@@ -382,8 +414,16 @@ serve(async (req) => {
         if (matches.length >= finalLimit) {
           break;
         }
+      } else {
+        skippedByExistingMatch++;
       }
     }
+
+    console.log(`DEBUG: Final allocation results:`);
+    console.log(`DEBUG: - New matches created: ${matches.length}`);
+    console.log(`DEBUG: - Skipped by student suggestion limit (${MAX_SUGGESTED_MATCHES_PER_STUDENT}): ${skippedByStudentLimit}`);
+    console.log(`DEBUG: - Skipped by user suggestion limit (${MAX_SUGGESTED_MATCHES_PER_USER}): ${skippedByUserLimit}`);
+    console.log(`DEBUG: - Skipped because match already exists: ${skippedByExistingMatch}`);
 
     console.log(`Creating ${matches.length} new matches`);
 
