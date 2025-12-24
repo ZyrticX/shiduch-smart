@@ -152,6 +152,18 @@ export function ExcelUpload() {
         throw new Error(data.error);
       }
 
+      // Show warnings about unrecognized cities
+      if (data?.warnings && data.warnings.length > 0) {
+        console.warn("City warnings:", data.warnings);
+        toast.warning(
+          `נטענו ${data.inserted || 0} רשומות בהצלחה\n${data.warningsCount || data.warnings.length} אזהרות`,
+          {
+            description: data.warnings.slice(0, 3).join('\n'),
+            duration: 10000,
+          }
+        );
+      }
+
       // Show duplicates warning if any
       if (data?.duplicates && data.duplicates.length > 0) {
         console.warn("Duplicates found:", data.duplicates);
@@ -166,19 +178,15 @@ export function ExcelUpload() {
       
       if (data?.errors && data.errors.length > 0) {
         console.error("Import errors:", data.errors);
-        const errorMessage = data.errors.join('\n');
-        console.error("Detailed import errors:", errorMessage);
-        
-        // Show each error separately for better visibility
         data.errors.forEach((err: string, index: number) => {
           console.error(`Error ${index + 1}:`, err);
         });
         
-        toast.error(`הועלו ${data.inserted || 0} רשומות, אבל היו ${data.errors.length} שגיאות. ראה קונסול לפרטים.`, {
-          description: data.errors.slice(0, 2).join('; '), // Show first 2 errors in toast
-          duration: 10000, // Show for 10 seconds
+        toast.error(`הועלו ${data.inserted || 0} רשומות, אבל היו ${data.errors.length} שגיאות.`, {
+          description: data.errors.slice(0, 2).join('; '),
+          duration: 10000,
         });
-      } else {
+      } else if (!data?.warnings || data.warnings.length === 0) {
         toast.success(`הנתונים הועלו בהצלחה: ${data.inserted || 0} רשומות נוספו`);
       }
       
