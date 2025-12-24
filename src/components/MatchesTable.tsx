@@ -328,6 +328,104 @@ const MatchesTable = () => {
     }
   };
 
+  // Export to CSV
+  const exportToCSV = async () => {
+    if (filteredMatches.length === 0) {
+      toast.warning("אין נתונים לייצוא");
+      return;
+    }
+
+    toast.info("מכין קובץ CSV...");
+
+    try {
+      // Load full details for all matches
+      const studentIds = filteredMatches.map(m => m.student_id);
+      const userIds = filteredMatches.map(m => m.user_id);
+
+      const [studentsRes, usersRes] = await Promise.all([
+        supabase.from('students').select('id, full_name, city, native_language, phone, email, special_requests').in('id', studentIds),
+        supabase.from('users').select('id, full_name, city, native_language, phone, email, capacity_max, current_students').in('id', userIds)
+      ]);
+
+      const studentsMap = new Map((studentsRes.data || []).map(s => [s.id, s]));
+      const usersMap = new Map((usersRes.data || []).map(u => [u.id, u]));
+
+      // Build CSV content
+      const headers = [
+        'מזהה התאמה',
+        'שם חייל',
+        'טלפון חייל',
+        'אימייל חייל',
+        'עיר חייל',
+        'שפת אם חייל',
+        'בקשות מיוחדות',
+        'שם מתנדב',
+        'טלפון מתנדב',
+        'אימייל מתנדב',
+        'עיר מתנדב',
+        'שפת אם מתנדב',
+        'קיבולת מתנדב',
+        'ציון התאמה',
+        'סיבת התאמה',
+        'סטטוס'
+      ];
+
+      const rows = filteredMatches.map(match => {
+        const student = studentsMap.get(match.student_id);
+        const user = usersMap.get(match.user_id);
+
+        return [
+          match.id,
+          student?.full_name || '',
+          student?.phone || '',
+          student?.email || '',
+          student?.city || '',
+          student?.native_language || '',
+          student?.special_requests || '',
+          user?.full_name || '',
+          user?.phone || '',
+          user?.email || '',
+          user?.city || '',
+          user?.native_language || '',
+          user ? `${user.current_students}/${user.capacity_max}` : '',
+          match.confidence_score,
+          match.match_reason || '',
+          match.status
+        ];
+      });
+
+      // Create CSV string with BOM for Hebrew support
+      const BOM = '\uFEFF';
+      const csvContent = BOM + [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => {
+          // Escape quotes and wrap in quotes if contains comma or newline
+          const cellStr = String(cell || '');
+          if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) {
+            return `"${cellStr.replace(/"/g, '""')}"`;
+          }
+          return cellStr;
+        }).join(','))
+      ].join('\n');
+
+      // Download file
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `התאמות_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`יוצאו ${filteredMatches.length} התאמות בהצלחה!`);
+    } catch (error) {
+      console.error("Error exporting CSV:", error);
+      toast.error("שגיאה בייצוא CSV");
+    }
+  };
+
   // Check if details match
   const checkMatch = (studentValue: string | null, userValue: string | null) => {
     if (!studentValue || !userValue) return null;
@@ -388,7 +486,7 @@ const MatchesTable = () => {
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full sm:max-w-sm text-right"
           />
-          <Button variant="outline" className="gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={exportToCSV}>
             <FileDown className="h-4 w-4" />
             <span className="hidden sm:inline">ייצא CSV</span>
             <span className="sm:hidden">CSV</span>
