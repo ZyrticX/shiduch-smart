@@ -189,7 +189,25 @@ export function ExcelUpload() {
       } else if (!data?.warnings || data.warnings.length === 0) {
         toast.success(`הנתונים הועלו בהצלחה: ${data.inserted || 0} רשומות נוספו`);
       }
-      
+
+      // Show geocoding results
+      if (data?.geocoding) {
+        const geo = data.geocoding;
+        if (geo.totalUpdated > 0) {
+          toast.success(`זיהוי מיקומים: ${geo.totalUpdated} כתובות עודכנו`, {
+            description: geo.unresolvedCities?.length > 0
+              ? `${geo.unresolvedCities.length} ערים לא זוהו: ${geo.unresolvedCities.slice(0, 3).join(', ')}`
+              : 'כל הערים זוהו בהצלחה',
+            duration: 8000,
+          });
+        } else if (geo.unresolvedCities?.length > 0) {
+          toast.warning(`${geo.unresolvedCities.length} ערים לא זוהו`, {
+            description: geo.unresolvedCities.slice(0, 3).join(', '),
+            duration: 8000,
+          });
+        }
+      }
+
       // Reset
       setFile(null);
       setSheets([]);

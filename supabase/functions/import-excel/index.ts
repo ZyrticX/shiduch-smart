@@ -721,19 +721,34 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Trigger geocoding for newly imported records
+    let geocodeResult: any = null;
+    if (totalUpserted > 0) {
+      try {
+        console.log('🌍 Triggering geocoding for newly imported records...');
+        const geocodeResponse = await supabaseClient.functions.invoke('geocode-cities');
+        geocodeResult = geocodeResponse.data;
+        console.log('🌍 Geocoding result:', JSON.stringify(geocodeResult));
+      } catch (geocodeError: any) {
+        console.error('⚠️ Geocoding failed (non-blocking):', geocodeError);
+        // Don't fail the import because of geocoding error
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: errors.length === 0,
         inserted: totalUpserted,
-        message: errors.length > 0 
+        message: errors.length > 0
           ? `הועלו ${totalUpserted} רשומות. ${errors.length} שגיאות: ${errors.join('; ')}`
           : `Successfully imported ${totalUpserted} records`,
         errors: errors.length > 0 ? errors : undefined,
-        duplicates: duplicates.length > 0 ? duplicates : undefined, // Return duplicates
+        duplicates: duplicates.length > 0 ? duplicates : undefined,
+        geocoding: geocodeResult || undefined,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: errors.length > 0 || duplicates.length > 0 ? 207 : 200, // 207 Multi-Status
+        status: errors.length > 0 || duplicates.length > 0 ? 207 : 200,
       }
     );
   } catch (error) {

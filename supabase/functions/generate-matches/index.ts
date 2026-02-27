@@ -53,71 +53,118 @@ function calculateDistance(
   return R * c;
 }
 
-// Calculate match score based on criteria
+// Check if student has no gender preference (from special_requests field)
+const NO_GENDER_PREFERENCE_PATTERNS = [
+  'אין העדפה', 'ללא העדפה', 'לא משנה', 'לא חשוב',
+  'אין לי העדפה', 'ללא העדפת מין', 'לא משנה מין',
+  'no preference', 'any gender', "doesn't matter",
+  'אין העדפה למין', 'ללא העדפה למין'
+];
+
+function hasNoGenderPreference(specialRequests: string | null): boolean {
+  if (!specialRequests) return false;
+  const lower = specialRequests.toLowerCase();
+  return NO_GENDER_PREFERENCE_PATTERNS.some(p => lower.includes(p));
+}
+
+/**
+ * New scoring algorithm based on the decision table:
+ *
+ * The distance score (0-100%) is the BASE. Gender + Language act as MULTIPLIERS:
+ *
+ * | Gender | Language | Available | Result                                    |
+ * |--------|----------|-----------|-------------------------------------------|
+ * |   ✅   |   ✅     |    ✅     | finalScore = distanceScore (max ~88%)      |
+ * |   ❌   |   ✅     |    ✅     | finalScore = distanceScore * 0.70 (max ~65%)|
+ * |   ✅   |   ❌     |    ✅     | finalScore = distanceScore * 0.55 (max ~50%)|
+ * |   ✅   |   ✅     |    ❌     | NO MATCH (user has no capacity)            |
+ * |   ❌   |   ❌     |    ✅     | NO MATCH (no gender + no language)          |
+ *
+ * Distance score: 100% = same city (0 km), 0% = max distance, linear scale.
+ * "No gender preference" in special_requests counts as gender match.
+ * Tie-breaker: prefer volunteer with fewer current students.
+ */
 function calculateMatchScore(
   student: Student,
   user: User,
   distance: number,
-  scoringConfig: {
-    languageMatchPoints: number;
-    sameCityPoints: number;
-    nearbyCityPoints: number;
-    nearbyCityDistanceKm: number;
-    genderMatchPoints: number;
-    specialRequestsPoints: number;
-  }
-): { score: number; reason: string } {
-  let score = 0;
+  maxDistanceKm: number
+): { score: number; reason: string; skip: boolean; skipReason: string } {
   const reasons: string[] = [];
 
-  // Language match
-  if (student.native_language === user.native_language) {
-    score += scoringConfig.languageMatchPoints;
-    reasons.push(`שפת אם זהה (${student.native_language})`);
-  }
+  // --- Check gender match ---
+  const studentNoPreference = hasNoGenderPreference(student.special_requests);
+  const genderMatch = studentNoPreference ||
+    (student.gender != null && user.gender != null && student.gender === user.gender);
 
-  // City/Distance match
-  if (distance === 0) {
-    score += scoringConfig.sameCityPoints;
-    reasons.push(`אותה עיר (${student.city})`);
-  } else if (distance > 0 && distance <= scoringConfig.nearbyCityDistanceKm) {
-    score += scoringConfig.nearbyCityPoints;
-    reasons.push(`מרחק ${distance.toFixed(0)} ק"מ`);
-  } else if (distance > scoringConfig.nearbyCityDistanceKm) {
-    // Cities are far apart - add negative note
-    reasons.push(`ערים רחוקות (${distance.toFixed(0)} ק"מ)`);
-  }
-
-  // Gender match
-  if (student.gender && user.gender && student.gender === user.gender) {
-    score += scoringConfig.genderMatchPoints;
+  if (studentNoPreference) {
+    reasons.push("אין העדפת מין");
+  } else if (genderMatch) {
     reasons.push("התאמת מין");
   }
 
-  // Special requests match
-  if (student.special_requests && user.native_language) {
-    const requestLower = student.special_requests.toLowerCase();
-    const userLangLower = user.native_language.toLowerCase();
-    if (requestLower.includes(userLangLower) || requestLower.includes("דובר")) {
-      score += scoringConfig.specialRequestsPoints;
-      reasons.push("התאמה לבקשות מיוחדות");
-    }
+  // --- Check language match ---
+  const languageMatch = student.native_language != null &&
+    user.native_language != null &&
+    student.native_language === user.native_language;
+
+  if (languageMatch) {
+    reasons.push(`שפת אם זהה (${student.native_language})`);
   }
 
-  // Cap at 100
-  score = Math.min(score, 100);
+  // --- RULE: No gender AND no language = NO MATCH ---
+  if (!genderMatch && !languageMatch) {
+    return {
+      score: 0,
+      reason: "אין התאמת מגדר ואין התאמת שפה",
+      skip: true,
+      skipReason: "no_gender_no_language",
+    };
+  }
 
-  // Build detailed reason string
-  const matchQuality = score >= 90 ? 'מצוינת' : score >= 80 ? 'טובה מאוד' : score >= 70 ? 'טובה' : 'סבירה';
-  const reason = reasons.length > 0 
-    ? `התאמה ${matchQuality} (${score}%) - ${reasons.join(' • ')}`
-    : `ציון התאמה: ${score}%`;
+  // --- Calculate distance score (100% = same city, 0% = maxDistance) ---
+  let distanceScore: number;
+  if (distance <= 0) {
+    distanceScore = 100;
+    reasons.push(`אותה עיר (${student.city})`);
+  } else if (distance >= maxDistanceKm) {
+    distanceScore = 0;
+    reasons.push(`ערים רחוקות (${distance.toFixed(0)} ק"מ)`);
+  } else {
+    // Linear interpolation: 0 km → 100%, maxDistanceKm → 0%
+    distanceScore = Math.round(100 * (1 - distance / maxDistanceKm));
+    reasons.push(`מרחק ${distance.toFixed(0)} ק"מ (${distanceScore}%)`);
+  }
 
-  return { score, reason };
+  // --- Apply multiplier based on gender + language ---
+  let multiplier: number;
+  let tier: string;
+
+  if (genderMatch && languageMatch) {
+    // Best case: both match → score ≈ distanceScore (cap at 88%)
+    multiplier = 0.88;
+    tier = "מגדר + שפה";
+  } else if (!genderMatch && languageMatch) {
+    // Language only → reduced score (cap at ~65%)
+    multiplier = 0.65;
+    tier = "שפה בלבד";
+  } else {
+    // Gender only → further reduced (cap at ~55%)
+    multiplier = 0.55;
+    tier = "מגדר בלבד";
+  }
+
+  const finalScore = Math.round(distanceScore * multiplier);
+  reasons.push(`קטגוריה: ${tier}`);
+
+  // Build reason string
+  const matchQuality = finalScore >= 80 ? 'מצוינת' : finalScore >= 60 ? 'טובה' : finalScore >= 40 ? 'סבירה' : 'נמוכה';
+  const reason = `התאמה ${matchQuality} (${finalScore}%) - ${reasons.join(' • ')}`;
+
+  return { score: finalScore, reason, skip: false, skipReason: "" };
 }
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders, status: 200 });
   }
@@ -137,7 +184,6 @@ serve(async (req) => {
       console.error("Error loading settings:", settingsError);
     }
 
-    // Convert settings array to object for easy access
     const settings: Record<string, string> = {};
     if (settingsData) {
       settingsData.forEach((s) => {
@@ -145,22 +191,17 @@ serve(async (req) => {
       });
     }
 
-    // Get configurable parameters with defaults
-    const nearbyCityDistanceKm = parseInt(settings.nearby_city_distance_km || "150", 10);
-    const minScore = parseInt(settings.min_match_score || "60", 10);
+    // Configurable parameters
+    const maxDistanceKm = parseInt(settings.nearby_city_distance_km || "150", 10);
+    const minScore = parseInt(settings.min_match_score || "30", 10);
     const limit = parseInt(settings.max_matches_limit || "100", 10);
-    const languageMatchPoints = parseInt(settings.language_match_points || "60", 10);
-    const sameCityPoints = parseInt(settings.same_city_points || "40", 10);
-    const nearbyCityPoints = parseInt(settings.nearby_city_points || "20", 10);
-    const genderMatchPoints = parseInt(settings.gender_match_points || "15", 10);
-    const specialRequestsPoints = parseInt(settings.special_requests_points || "5", 10);
 
     const { minScore: reqMinScore, limit: reqLimit } = await req.json().catch(() => ({}));
     const finalMinScore = reqMinScore || minScore;
     const finalLimit = reqLimit || limit;
 
     console.log("Starting match generation...");
-    console.log(`Using settings: nearbyCityDistanceKm=${nearbyCityDistanceKm}, minScore=${finalMinScore}, limit=${finalLimit}`);
+    console.log(`Settings: maxDistanceKm=${maxDistanceKm}, minScore=${finalMinScore}, limit=${finalLimit}`);
 
     // Load unmatched students
     const { data: students, error: studentsError } = await supabaseClient
@@ -184,62 +225,49 @@ serve(async (req) => {
       throw usersError;
     }
 
-    console.log(`DEBUG: Found ${students.length} unmatched students in database`);
-    console.log(`DEBUG: Found ${users.length} active users in database`);
+    console.log(`Found ${students.length} unmatched students, ${users.length} active users`);
 
-    // Filter users with available capacity and scholarship active (if required)
+    // Filter users: must have capacity AND scholarship active
     const availableUsers = users.filter((u: User) => {
       const hasCapacity = u.current_students < u.capacity_max;
-      const hasScholarship = u.scholarship_active !== false; // Only exclude if explicitly false
+      const hasScholarship = u.scholarship_active !== false;
       return hasCapacity && hasScholarship;
     });
 
-    console.log(`DEBUG: Available users after filtering (capacity & scholarship): ${availableUsers.length}`);
-    
-    if (users.length > 0 && availableUsers.length === 0) {
-      const usersWithNoCapacity = users.filter(u => u.current_students >= u.capacity_max).length;
-      const usersWithNoScholarship = users.filter(u => u.scholarship_active === false).length;
-      console.log(`DEBUG: Reasons for 0 available users: ${usersWithNoCapacity} full capacity, ${usersWithNoScholarship} inactive scholarship`);
-    }
+    console.log(`Available users after filtering: ${availableUsers.length}`);
 
     if (students.length === 0 || availableUsers.length === 0) {
       return new Response(
-        JSON.stringify({ 
+        JSON.stringify({
           suggestedCount: 0,
-          message: students.length === 0 
-            ? "אין סטודנטים ממתינים (כולם כבר משובצים או שאין נתונים)" 
+          message: students.length === 0
+            ? "אין סטודנטים ממתינים (כולם כבר משובצים או שאין נתונים)"
             : `אין משתמשים זמינים (נמצאו ${users.length} משתמשים אך אף אחד לא עומד בתנאי הקיבולת והמלגה)`,
           debug: {
             studentsCount: students.length,
             usersCount: users.length,
-            availableUsersCount: availableUsers.length
-          }
+            availableUsersCount: availableUsers.length,
+          },
         }),
-        {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 200,
-        }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
       );
     }
 
-    // Generate matches
-    const matches = [];
+    // Track capacity and suggestion limits
     const userCapacity = new Map<string, number>();
-    const userSuggestedMatches = new Map<string, number>(); // Track suggested matches per user
-    const studentSuggestedMatches = new Map<string, number>(); // Track suggested matches per student
+    const userSuggestedMatches = new Map<string, number>();
+    const studentSuggestedMatches = new Map<string, number>();
 
-    // Initialize user capacity tracking
     availableUsers.forEach((u: User) => {
       userCapacity.set(u.id, u.capacity_max - u.current_students);
-      userSuggestedMatches.set(u.id, 0); // Initialize suggested matches counter
+      userSuggestedMatches.set(u.id, 0);
     });
 
-    // Initialize student suggested matches counter
     students.forEach((s: Student) => {
       studentSuggestedMatches.set(s.id, 0);
     });
 
-    // Count existing suggested matches per user and per student
+    // Count existing suggested matches
     const { data: existingSuggestedMatches } = await supabaseClient
       .from("matches")
       .select("user_id, student_id")
@@ -247,146 +275,112 @@ serve(async (req) => {
 
     if (existingSuggestedMatches) {
       existingSuggestedMatches.forEach((match: any) => {
-        // Count for user
-        const userCount = userSuggestedMatches.get(match.user_id) || 0;
-        userSuggestedMatches.set(match.user_id, userCount + 1);
-        
-        // Count for student
-        const studentCount = studentSuggestedMatches.get(match.student_id) || 0;
-        studentSuggestedMatches.set(match.student_id, studentCount + 1);
+        const uc = userSuggestedMatches.get(match.user_id) || 0;
+        userSuggestedMatches.set(match.user_id, uc + 1);
+        const sc = studentSuggestedMatches.get(match.student_id) || 0;
+        studentSuggestedMatches.set(match.student_id, sc + 1);
       });
     }
 
-    // Calculate all possible matches
+    // --- Calculate all possible matches ---
     const possibleMatches = [];
+    let skippedNoGenderNoLang = 0;
     let skippedByScore = 0;
     let skippedByDistance = 0;
-    let skippedByQuality = 0;
 
     for (const student of students as Student[]) {
       for (const user of availableUsers as User[]) {
-        // CRITICAL: Prevent matching the same ID (student ID should never equal user ID)
-        if (student.id === user.id) {
-          console.warn(`WARNING: Skipping match attempt - same ID detected: ${student.id}`);
-          continue;
-        }
-        
+        if (student.id === user.id) continue;
+
         // Calculate distance
-        let distance = 0;
-        let hasCoordinates = false;
-        
+        let distance = -1; // -1 means unknown
         if (
-          student.latitude &&
-          student.longitude &&
-          user.latitude &&
-          user.longitude
+          student.latitude && student.longitude &&
+          user.latitude && user.longitude
         ) {
-          hasCoordinates = true;
           distance = calculateDistance(
-            Number(student.latitude),
-            Number(student.longitude),
-            Number(user.latitude),
-            Number(user.longitude)
+            Number(student.latitude), Number(student.longitude),
+            Number(user.latitude), Number(user.longitude)
           );
-          
-          // Skip if distance exceeds configured limit
-          if (distance > nearbyCityDistanceKm) {
+
+          // Skip if too far
+          if (distance > maxDistanceKm) {
             skippedByDistance++;
             continue;
           }
         } else {
-          // No coordinates - compare cities by name (case-insensitive, trimmed)
-          const studentCity = (student.city || '').trim().toLowerCase();
-          const userCity = (user.city || '').trim().toLowerCase();
-          
-          if (studentCity === userCity && studentCity !== '' && studentCity !== 'לא צוין') {
-            // Same city by name
+          // No coordinates - compare city names
+          const sc = (student.city || '').trim().toLowerCase();
+          const uc = (user.city || '').trim().toLowerCase();
+          if (sc === uc && sc !== '' && sc !== 'לא צוין') {
             distance = 0;
           } else {
-            // Different cities and no way to calculate distance - use high distance
-            distance = nearbyCityDistanceKm + 1;
-            // This will be filtered out by the scoring logic
+            distance = maxDistanceKm + 1;
+            skippedByDistance++;
+            continue;
           }
         }
 
-        const scoringConfig = {
-          languageMatchPoints,
-          sameCityPoints,
-          nearbyCityPoints,
-          nearbyCityDistanceKm,
-          genderMatchPoints,
-          specialRequestsPoints,
-        };
+        const { score, reason, skip, skipReason } = calculateMatchScore(
+          student, user, distance, maxDistanceKm
+        );
 
-        const { score, reason } = calculateMatchScore(student, user, distance, scoringConfig);
+        if (skip) {
+          if (skipReason === "no_gender_no_language") skippedNoGenderNoLang++;
+          continue;
+        }
 
-        // Skip if below minimum score
         if (score < finalMinScore) {
           skippedByScore++;
           continue;
         }
 
-        // Additional quality checks for better precision:
-        // 1. Require at least language match OR same city for high-quality matches
-        const hasLanguageMatch = student.native_language === user.native_language;
-        const hasSameCity = distance === 0;
-        
-        // If score is below 70, require at least language match OR same city
-        if (score < 70 && !hasLanguageMatch && !hasSameCity) {
-          skippedByQuality++;
-          continue; // Skip low-quality matches without key criteria
-        }
-
+        // Include current_students for tie-breaking (prefer volunteer with fewer students)
         possibleMatches.push({
           student_id: student.id,
           user_id: user.id,
           score,
           reason,
           distance,
+          userCurrentStudents: user.current_students,
         });
       }
     }
 
-    console.log(`DEBUG: Total pairs checked: ${students.length * availableUsers.length}`);
-    console.log(`DEBUG: Skipped by score (<${finalMinScore}): ${skippedByScore}`);
-    console.log(`DEBUG: Skipped by distance (>${nearbyCityDistanceKm}km): ${skippedByDistance}`);
-    console.log(`DEBUG: Skipped by quality (score<70 & no lang/city match): ${skippedByQuality}`);
+    console.log(`Pairs checked: ${students.length * availableUsers.length}`);
+    console.log(`Skipped - no gender & no language: ${skippedNoGenderNoLang}`);
+    console.log(`Skipped - distance too far: ${skippedByDistance}`);
+    console.log(`Skipped - below min score (${finalMinScore}): ${skippedByScore}`);
+    console.log(`Possible matches: ${possibleMatches.length}`);
 
-    // Sort by score (highest first)
-    possibleMatches.sort((a, b) => b.score - a.score);
+    // Sort: highest score first, then prefer volunteer with FEWER current students
+    possibleMatches.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.userCurrentStudents - b.userCurrentStudents; // fewer students = higher priority
+    });
 
-    console.log(`Generated ${possibleMatches.length} possible matches`);
-
-    // Greedy allocation - assign best matches first
-    // Limits: 
-    // - max 3 suggested matches per student (to ensure quality)
-    // - max 5 suggested matches per user (to prevent spam)
-    const MAX_SUGGESTED_MATCHES_PER_STUDENT = 3;
-    const MAX_SUGGESTED_MATCHES_PER_USER = 5;
-
+    // --- Greedy allocation ---
+    const MAX_SUGGESTED_PER_STUDENT = 3;
+    const MAX_SUGGESTED_PER_USER = 5;
+    const matches = [];
     let skippedByStudentLimit = 0;
     let skippedByUserLimit = 0;
-    let skippedByExistingMatch = 0;
+    let skippedByExisting = 0;
 
     for (const match of possibleMatches) {
-      // Check user capacity (for approved matches)
       const capacity = userCapacity.get(match.user_id) || 0;
-      if (capacity <= 0) {
+      if (capacity <= 0) continue;
+
+      const studentCount = studentSuggestedMatches.get(match.student_id) || 0;
+      if (studentCount >= MAX_SUGGESTED_PER_STUDENT) {
+        skippedByStudentLimit++;
         continue;
       }
 
-      // Check how many suggested matches this student already has
-      const currentStudentSuggestedCount = studentSuggestedMatches.get(match.student_id) || 0;
-      if (currentStudentSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_STUDENT) {
-        skippedByStudentLimit++;
-        continue; // Skip - student already has enough suggested matches
-      }
-
-      // Check how many suggested matches this user already has
-      const currentUserSuggestedCount = userSuggestedMatches.get(match.user_id) || 0;
-      if (currentUserSuggestedCount >= MAX_SUGGESTED_MATCHES_PER_USER) {
+      const userCount = userSuggestedMatches.get(match.user_id) || 0;
+      if (userCount >= MAX_SUGGESTED_PER_USER) {
         skippedByUserLimit++;
-        continue; // Skip - user already has enough suggested matches
+        continue;
       }
 
       // Check if match already exists
@@ -397,37 +391,31 @@ serve(async (req) => {
         .eq("user_id", match.user_id)
         .maybeSingle();
 
-      if (!existingMatch) {
-        matches.push({
-          student_id: match.student_id,
-          user_id: match.user_id,
-          confidence_score: match.score,
-          match_reason: match.reason,
-          status: "Suggested", // Use Suggested status
-        });
-
-        // Update suggested matches counters
-        studentSuggestedMatches.set(match.student_id, currentStudentSuggestedCount + 1);
-        userSuggestedMatches.set(match.user_id, currentUserSuggestedCount + 1);
-
-        // Stop if we reached the limit
-        if (matches.length >= finalLimit) {
-          break;
-        }
-      } else {
-        skippedByExistingMatch++;
+      if (existingMatch) {
+        skippedByExisting++;
+        continue;
       }
+
+      matches.push({
+        student_id: match.student_id,
+        user_id: match.user_id,
+        confidence_score: match.score,
+        match_reason: match.reason,
+        status: "Suggested",
+      });
+
+      studentSuggestedMatches.set(match.student_id, studentCount + 1);
+      userSuggestedMatches.set(match.user_id, userCount + 1);
+
+      if (matches.length >= finalLimit) break;
     }
 
-    console.log(`DEBUG: Final allocation results:`);
-    console.log(`DEBUG: - New matches created: ${matches.length}`);
-    console.log(`DEBUG: - Skipped by student suggestion limit (${MAX_SUGGESTED_MATCHES_PER_STUDENT}): ${skippedByStudentLimit}`);
-    console.log(`DEBUG: - Skipped by user suggestion limit (${MAX_SUGGESTED_MATCHES_PER_USER}): ${skippedByUserLimit}`);
-    console.log(`DEBUG: - Skipped because match already exists: ${skippedByExistingMatch}`);
+    console.log(`New matches: ${matches.length}`);
+    console.log(`Skipped - student limit (${MAX_SUGGESTED_PER_STUDENT}): ${skippedByStudentLimit}`);
+    console.log(`Skipped - user limit (${MAX_SUGGESTED_PER_USER}): ${skippedByUserLimit}`);
+    console.log(`Skipped - already exists: ${skippedByExisting}`);
 
-    console.log(`Creating ${matches.length} new matches`);
-
-    // Insert matches into database
+    // Insert matches
     if (matches.length > 0) {
       const { error: insertError } = await supabaseClient
         .from("matches")
@@ -440,30 +428,26 @@ serve(async (req) => {
     }
 
     // Log scan to history
-    const scanRecord = {
+    await supabaseClient.from("scan_history").insert({
       scan_type: reqMinScore || reqLimit ? 'manual' : 'automatic',
       parameters: {
         minScore: finalMinScore,
         limit: finalLimit,
-        nearbyCityDistanceKm,
-        languageMatchPoints,
-        sameCityPoints,
-        nearbyCityPoints,
-        genderMatchPoints,
-        specialRequestsPoints,
+        maxDistanceKm,
+        algorithm: "v2_distance_based",
       },
       results: {
         suggestedCount: matches.length,
         studentsScanned: students.length,
         usersAvailable: availableUsers.length,
         possibleMatchesFound: possibleMatches.length,
+        skippedNoGenderNoLang,
+        skippedByDistance,
+        skippedByScore,
       },
       created_by: 'system',
-    };
-
-    await supabaseClient.from("scan_history").insert(scanRecord).catch((err) => {
+    }).catch((err) => {
       console.error("Error logging scan history:", err);
-      // Don't fail the request if logging fails
     });
 
     return new Response(
@@ -471,20 +455,14 @@ serve(async (req) => {
         suggestedCount: matches.length,
         message: `נוצרו ${matches.length} התאמות חדשות בהצלחה`,
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   } catch (error) {
     console.error("Error in generate-matches:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
   }
 });
